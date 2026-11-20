@@ -1,86 +1,117 @@
-# Quriva
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" alt="Ikon Quriva" width="120" height="120" />
+</p>
 
-Aplikasi Android open source untuk membaca Al-Qur'an dengan antarmuka hitam-putih yang modern, teks Utsmani, terjemahan Bahasa Indonesia (Kemenag RI), dan dukungan offline untuk teks inti.
+<h1 align="center">Quriva</h1>
 
-## Fitur
+<p align="center">
+  <b>Teman tilawah harian untuk membaca, mendengarkan, dan menjaga kebiasaan bersama Al-Qur'an.</b><br/>
+  <i>Sederhana, tenang, dan nyaman digunakan setiap hari.</i>
+</p>
 
-**Membaca**
-- 114 surah dengan nama Arab, nama Latin, arti, jumlah ayat, dan tempat turun
-- Teks Arab Utsmani + terjemahan Bahasa Indonesia per ayat (dibundel offline)
-- Opsi tampilan: tajwid berwarna, kata-per-kata, dan transliterasi Latin (diambil dari Quran.com saat dibutuhkan)
-- Mode fokus (sembunyikan terjemahan), tema sistem/terang/gelap, dan pengaturan ukuran teks
-- Kartu “Terakhir dibaca”, penyimpanan posisi bacaan otomatis, dan ayat hari ini di beranda
-- Navigasi 30 Juz lengkap dengan rentang surah dan ayat
+<p align="center">
+  <a href="https://github.com/LT-SYAII/quriva/releases/latest"><b>Unduh Aplikasi (GitHub Releases)</b></a>
+</p>
 
-**Audio murottal**
-- Pemutaran per surah **per ayat** dari Quran.com (12 qari)
-- **Sorot & lompat ayat** serta opsi gulir otomatis mengikuti ayat yang diputar
-- Kontrol putar/jeda, sebelumnya/berikutnya, posisi audio, kecepatan putar, mode ulang (mati/surah/ayat), dan timer tidur
-- **Latar belakang seperti pemutar musik**: tetap berjalan saat aplikasi ditinggalkan/layar mati dengan notifikasi media dan kontrol lock screen/headset/Bluetooth
-- **Lanjutkan audio** (posisi terakhir diingat) dan **unduh audio per surah** untuk diputar offline
-- Mini player di layar baca
+---
 
-**Tafsir, terjemahan & pemahaman**
-- Tafsir per ayat online dari Quran.com: Ibn Kathir (Inggris), Ma'arif al-Qur'an, Tazkirul Quran, Ibn Kathir/Al-Qurtubi/As-Sa'di/Al-Baghawi/Muyassar (Arab)
-- Teks inti + terjemahan Kemenag RI tersedia offline; terjemahan/tafsir tambahan dimuat online
-- Catatan: tafsir berbahasa Indonesia belum tersedia di API Quran.com
+## 🌙 Tentang Quriva
 
-**Pencarian & koleksi**
-- Pencarian surah (nama, arti, nomor, Arab) dan filter Makkiyah/Madaniyah
-- Pencarian global offline ke seluruh 6.236 ayat (Arab/terjemahan/referensi seperti `2:255`) dengan sorotan hasil
-- **Bookmark** ayat tersimpan di perangkat (dengan pratinjau teks) serta **catatan pribadi** per ayat
+**Quriva** adalah aplikasi Al-Qur'an untuk membantu umat Muslim membaca dan mendengarkan Al-Qur'an dengan lebih mudah, serta membangun kebiasaan tilawah yang istiqamah. Tampilannya dibuat bersih dan nyaman di mata, dengan fokus pada pengalaman membaca yang tenang.
 
-**Progres & kebiasaan**
-- Pelacak progres bacaan harian, estimasi khatam, target khatam, dan statistik
-- Pengingat baca harian (preferensi di aplikasi)
+> *"Bacalah Al-Qur'an, karena ia akan datang memberi syafaat bagi para pembacanya."*
 
-**Berbagi**
-- Salin/bagikan ayat (teks dengan tautan quran.com)
-- Bagikan sebagai **kartu ayat** (gambar)
+---
 
-## Sumber data
+## 📖 Baca Al-Qur'an
 
-- **Teks Arab Utsmani & terjemahan Indonesia**: [Quran.com](https://quran.com) API v4
-  - Teks: `quran/verses/uthmani`
-  - Terjemahan: `quran/translations/33` (Kementerian Agama RI)
-  - Metadata surah: `chapters?language=id`
-  - Pembagian juz: `juzs`
-- Data teks inti dibundel sebagai aset lokal:
-  - `app/src/main/assets/surahs.json`
-  - `app/src/main/assets/juzs.json`
-  - `app/src/main/assets/quran/001.json` ... `114.json`
-- **Audio murottal**: `chapter_recitations` dan `recitations/.../by_chapter` (streaming/unduhan, memerlukan internet untuk akses awal)
-- **Tafsir**: `tafsirs/{id}/by_ayah/{surah}:{ayah}` (online)
-- **Kata-per-kata, transliterasi, tajwid**: `verses/by_chapter` (words) dan `quran/verses/uthmani_tajweed` (online, dimuat sesuai kebutuhan)
-- **Font**: [Amiri](https://github.com/aliftype/amiri) (SIL Open Font License), tersedia di `app/src/main/assets/licenses/amiri-OFL.txt`.
+| Isi & Kemudahan | Keterangan |
+|---|---|
+| **114 Surah Lengkap** | Nama Arab, nama Latin, arti, jumlah ayat, dan keterangan tempat turun (Makkiyah/Madaniyah). |
+| **Teks Utsmani & Terjemahan** | Teks Arab Utsmani disertai terjemahan Bahasa Indonesia agar maknanya lebih mudah dipahami. |
+| **Bisa Dibaca Offline** | Teks Al-Qur'an dan terjemahan inti dapat dibaca tanpa koneksi internet. |
+| **Nyaman di Mata** | Pengaturan ukuran teks Arab & terjemahan, mode fokus (sembunyikan terjemahan), serta pilihan tema terang/gelap mengikuti perangkat. |
+| **Lanjutkan Bacaan** | Posisi bacaan terakhir tersimpan otomatis sehingga mudah melanjutkan kapan saja. |
+| **Ayat Hari Ini** | Sajian ayat pilihan setiap hari untuk pengingat dan renungan. |
+| **Navigasi Juz & Halaman** | Jelajahi Al-Qur'an melalui 30 Juz dan tampilan halaman mushaf. |
 
-## Arsitektur singkat
+---
 
-- Kotlin + Jetpack Compose + Material 3
-- MVVM ringan dengan `AndroidViewModel` dan `StateFlow`
-- Data per surah dimuat dari aset secara lazy; indeks pencarian global dinormalisasi sekali di memori
-- Navigasi: AndroidX Navigation Compose
-- Audio: AndroidX Media3 ExoPlayer + `MediaSessionService` untuk pemutaran latar belakang/per-ayat
-- Build release memakai R8 dan resource shrinking
-- Preferensi, bookmark, catatan, progres, dan posisi baca/audio: SharedPreferences/JSON lokal
-- Teks inti sepenuhnya offline; audio, tafsir, kata-per-kata, tajwid, dan terjemahan tambahan memerlukan internet
+## 🎧 Dengarkan Murottal
 
-Izin jaringan dipakai untuk audio, tafsir, dan fitur studi online. Izin foreground media playback, wake lock, dan notifikasi mendukung pemutaran murottal di latar belakang. Aplikasi tidak meminta akses ke kontak, lokasi, kamera, atau penyimpanan pengguna.
+- **Putar per Ayat** — dengarkan murottal ayat demi ayat, lengkap dengan sorotan ayat yang sedang diputar.
+- **Ikuti Bacaan** — tampilan dapat mengikuti ayat yang dibaca, memudahkan untuk menyimak dan mengulang.
+- **Pilihan Qari** — tersedia beragam qari untuk menemani tilawah.
+- **Kontrol Lengkap** — putar/jeda, lompat ayat, atur kecepatan, mode ulang, dan pengatur waktu tidur.
+- **Tetap Berjalan di Latar Belakang** — murottal tetap diputar saat layar mati atau berpindah aplikasi, dengan kontrol pemutaran yang praktis.
+- **Lanjut Otomatis ke Surah Berikutnya** — setelah satu surah selesai, bacaan berlanjut ke surah berikutnya hingga akhir.
+- **Simpan untuk Didengar Offline** — unduh murottal per surah agar bisa didengarkan tanpa internet.
+- **Lanjutkan Audio** — posisi murottal terakhir diingat.
 
-## Build
+---
 
-Prasyarat: JDK 17+, Android SDK dengan platform 36.
+## 📚 Pahami & Dalami
 
-```bash
-ANDROID_HOME=/path/to/android-sdk ./gradlew assembleDebug
-ANDROID_HOME=/path/to/android-sdk ./gradlew assembleRelease
-```
+- **Tajwid Berwarna** — membantu mengenali hukum bacaan pada teks Arab.
+- **Kata per Kata & Transliterasi** — dukungan arti per kata dan bacaan Latin untuk membantu belajar.
+- **Tafsir & Terjemahan Tambahan** — pilihan tafsir dan terjemahan lain untuk memperdalam pemahaman ayat.
+- **Catatan Pribadi** — tulis catatan atau refleksi pada ayat tertentu.
+- **Bookmark Ayat** — tandai ayat favorit agar mudah ditemukan kembali.
 
-APK debug ada di `app/build/outputs/apk/debug/app-debug.apk`; APK release yang
-telah dioptimalkan R8 ada di `app/build/outputs/apk/release/app-release.apk`.
+> *Sebagian fitur pendalaman dan murottal memerlukan koneksi internet saat digunakan.*
 
-## Lisensi
+---
 
-Kode aplikasi: MIT (lihat `LICENSE`).
+## 🔎 Cari & Jelajahi
 
-Konten Al-Qur'an, terjemahan, audio, tafsir, dan font memiliki lisensi masing-masing seperti dijelaskan di bagian sumber data dan di dalam aplikasi.
+- **Cari Surah** — temukan surah berdasarkan nama, arti, nomor, atau teks Arab, dengan penyaring Makkiyah/Madaniyah.
+- **Cari Ayat** — telusuri ayat dengan cepat, termasuk pencarian berdasarkan terjemahan atau rujukan ayat.
+- **Jelajah Terstruktur** — akses cepat ke daftar surah, juz, halaman, bookmark, dan catatan dalam satu tempat.
+
+---
+
+## 🔥 Daily Streak & Kebiasaan Tilawah
+
+Bangun kebiasaan baik bersama Quriva:
+
+- **Streak Harian** — lihat berapa hari berturut-turut kamu berinteraksi dengan Al-Qur'an.
+- **Aktivitas Baca & Dengar** — pantau jumlah ayat yang dibaca dan diputar, hari ini maupun keseluruhan.
+- **Kalender Aktivitas** — tampilan aktivitas dengan pilihan **Harian, Mingguan, dan Bulanan** untuk melihat kapan rajin dan kapan mulai jarang.
+- **Pengingat Harian** — notifikasi pengingat setiap hari agar tidak lupa menyempatkan tilawah.
+- **Pengingat Jika Terlewat** — bila sehari terlewat, Quriva akan mengingatkan keesokan harinya, misalnya: *"Kamu belum membaca Al-Qur'an selama 1 hari"*.
+
+---
+
+## 🤲 Berbagi Kebaikan
+
+- **Bagikan Ayat** — kirim teks ayat dan terjemahannya kepada keluarga atau teman.
+- **Kartu Ayat** — bagikan ayat dalam bentuk gambar yang indah dan mudah dibaca.
+
+---
+
+## ⚙️ Pengaturan & Tentang Aplikasi
+
+Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampilan bacaan dan murottal, hingga pengingat harian.
+
+**Tentang Aplikasi**
+- **Nama:** Quriva
+- **Versi:** 1.4.0
+- **Pembuat:** Bang syaii
+
+---
+
+## ⬇️ Unduh & Pasang
+
+Untuk mendapatkan Quriva, unduh file aplikasi (APK) versi terbaru melalui halaman rilis resmi:
+
+<p align="center">
+  👉 <a href="https://github.com/LT-SYAII/quriva/releases"><b>Buka GitHub Releases Quriva</b></a>
+</p>
+
+> **Catatan:** Saat memasang aplikasi dari luar toko aplikasi, perangkat Android mungkin meminta izin untuk menginstal dari sumber tersebut. Quriva tidak meminta akses ke kontak, lokasi, atau kamera.
+
+---
+
+## 📄 Lisensi
+
+Quriva adalah aplikasi **open source** (lisensi MIT). Rincian lisensi kode tersedia pada berkas [LICENSE](LICENSE).
