@@ -2,6 +2,7 @@ package com.quriva.app.ui.screens
 
 import android.app.Application
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,6 +56,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -191,6 +195,8 @@ fun HomeScreen(
                             streakDays = streak.streakDays,
                             todayRead = streak.todayRead,
                             todayPlay = streak.todayPlay,
+                            weekTotal = streak.weekRead + streak.weekPlay,
+                            activeDays30 = streak.activeDays30,
                             onOpen = onOpenProgress
                         )
                     }
@@ -354,27 +360,78 @@ private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit)
 }
 
 @Composable
-private fun StreakSummaryCard(streakDays: Int, todayRead: Int, todayPlay: Int, onOpen: () -> Unit) {
+private fun StreakSummaryCard(
+    streakDays: Int,
+    todayRead: Int,
+    todayPlay: Int,
+    weekTotal: Int,
+    activeDays30: Int,
+    onOpen: () -> Unit
+) {
     val colors = MaterialTheme.colorScheme
+    val todayTotal = todayRead + todayPlay
+    val ringProgress = (streakDays / 30f).coerceIn(0f, 1f)
+    val dailyGoal = 20
+    val dailyProgress = (todayTotal / dailyGoal.toFloat()).coerceIn(0f, 1f)
     Surface(
         onClick = onOpen,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 14.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = colors.surfaceVariant,
-        border = BorderStroke(1.dp, colors.outlineVariant)
+        shape = RoundedCornerShape(26.dp),
+        color = colors.inverseSurface
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = CircleShape, color = colors.onBackground, modifier = Modifier.size(42.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(painter = painterResource(R.drawable.ic_book_open), contentDescription = null, tint = colors.background, modifier = Modifier.size(20.dp))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier.size(140.dp).align(Alignment.TopEnd)
+                    .background(Brush.radialGradient(listOf(colors.inverseOnSurface.copy(alpha = 0.12f), Color.Transparent)), CircleShape)
+            )
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(58.dp)) {
+                        Canvas(modifier = Modifier.size(58.dp)) {
+                            val sw = 6.dp.toPx()
+                            drawArc(color = colors.inverseOnSurface.copy(alpha = 0.18f), startAngle = -220f, sweepAngle = 260f, useCenter = false, style = Stroke(width = sw, cap = StrokeCap.Round))
+                            drawArc(color = colors.inverseOnSurface, startAngle = -220f, sweepAngle = 260f * ringProgress, useCenter = false, style = Stroke(width = sw, cap = StrokeCap.Round))
+                        }
+                        Text("$streakDays", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.inverseOnSurface)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Daily Streak", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.7f), letterSpacing = 1.sp)
+                        Text(if (streakDays > 0) "$streakDays hari berturut-turut" else "Mulai streak hari ini", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.inverseOnSurface)
+                        Text("30 hari: $activeDays30 aktif · 7 hari: $weekTotal aktivitas", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.65f))
+                    }
+                    Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = colors.inverseOnSurface.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
                 }
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatPill("Baca", "$todayRead", "ayat", Modifier.weight(1f), colors)
+                    StatPill("Dengar", "$todayPlay", "ayat", Modifier.weight(1f), colors)
+                    StatPill("Hari ini", "$todayTotal", "aktivitas", Modifier.weight(1f), colors)
+                }
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { dailyProgress },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = colors.inverseOnSurface,
+                    trackColor = colors.inverseOnSurface.copy(alpha = 0.18f)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("Target harian: $dailyGoal aktivitas", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.6f))
             }
-            Spacer(Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Streak $streakDays hari", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                Text("Hari ini: $todayRead ayat dibaca · $todayPlay diputar", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun StatPill(label: String, value: String, unit: String, modifier: Modifier = Modifier, colors: androidx.compose.material3.ColorScheme) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = colors.inverseOnSurface.copy(alpha = 0.1f)) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.65f))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.inverseOnSurface)
+                Spacer(Modifier.width(2.dp))
+                Text(unit, style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 1.dp))
             }
-            Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }

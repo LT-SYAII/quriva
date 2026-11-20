@@ -6,21 +6,28 @@ import com.quriva.app.data.AppPreferences
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class StreakRange(val label: String) { DAILY("Harian"), WEEKLY("Mingguan"), MONTHLY("Bulanan") }
 
 data class DayStat(val date: String, val readCount: Int, val playCount: Int)
-
 data class WeekStat(val label: String, val readCount: Int, val playCount: Int, val activeDays: Int)
-
 data class MonthStat(val label: String, val readCount: Int, val playCount: Int, val activeDays: Int)
 
 data class StreakStats(
     val streakDays: Int = 0,
     val todayRead: Int = 0,
     val todayPlay: Int = 0,
+    val weekRead: Int = 0,
+    val weekPlay: Int = 0,
+    val monthRead: Int = 0,
+    val monthPlay: Int = 0,
     val totalRead: Int = 0,
     val totalPlay: Int = 0,
+    val activeDays30: Int = 0,
+    val bestDayCount: Int = 0,
+    val bestDayLabel: String = "",
+    val avgDaily7: Int = 0,
     val days: List<DayStat> = emptyList(),
     val weeks: List<WeekStat> = emptyList(),
     val months: List<MonthStat> = emptyList()
@@ -38,6 +45,7 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
             fun readFor(key: String) = daily[key]?.size ?: 0
             fun playFor(key: String) = playDaily[key] ?: 0
             fun active(key: String) = readFor(key) > 0 || playFor(key) > 0
+            fun totalFor(key: String) = readFor(key) + playFor(key)
 
             // streak ending today or yesterday
             var streak = 0
@@ -63,11 +71,11 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
-            // daily: last 30 days
-            val days = ArrayList<DayStat>(30)
+            // daily: last 35 days (5 weeks grid)
+            val days = ArrayList<DayStat>(35)
             val dcal = Calendar.getInstance()
-            dcal.add(Calendar.DAY_OF_YEAR, -29)
-            repeat(30) {
+            dcal.add(Calendar.DAY_OF_YEAR, -34)
+            repeat(35) {
                 val k = fmt.format(dcal.time)
                 days += DayStat(k, readFor(k), playFor(k))
                 dcal.add(Calendar.DAY_OF_YEAR, 1)
@@ -76,12 +84,11 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
             // weekly: last 8 weeks (Mon-Sun buckets)
             val weeks = ArrayList<WeekStat>(8)
             val wcal = Calendar.getInstance()
-            // move to start of this week (Monday)
             val dow = wcal.get(Calendar.DAY_OF_WEEK)
             val delta = if (dow == Calendar.SUNDAY) -6 else Calendar.MONDAY - dow
             wcal.add(Calendar.DAY_OF_YEAR, delta)
             wcal.add(Calendar.WEEK_OF_YEAR, -7)
-            val weekLabelFmt = SimpleDateFormat("d MMM", Locale("id", "ID"))
+            val weekLabelFmt = SimpleDateFormat("d MMM", Locale.forLanguageTag("id-ID"))
             repeat(8) {
                 var r = 0; var p = 0; var a = 0
                 val start = wcal.time
@@ -92,8 +99,7 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
                     if (rk > 0 || pk > 0) a++
                     wcal.add(Calendar.DAY_OF_YEAR, 1)
                 }
-                val label = weekLabelFmt.format(start)
-                weeks += WeekStat(label, r, p, a)
+                weeks += WeekStat(weekLabelFmt.format(start), r, p, a)
             }
 
             // monthly: last 6 months
@@ -101,7 +107,7 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
             val mcal = Calendar.getInstance()
             mcal.set(Calendar.DAY_OF_MONTH, 1)
             mcal.add(Calendar.MONTH, -5)
-            val monthLabelFmt = SimpleDateFormat("MMM yy", Locale("id", "ID"))
+            val monthLabelFmt = SimpleDateFormat("MMM yy", Locale.forLanguageTag("id-ID"))
             repeat(6) {
                 val label = monthLabelFmt.format(mcal.time)
                 val maxDay = mcal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -120,12 +126,35 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
             val totalRead = daily.values.sumOf { it.size }
             val totalPlay = playDaily.values.sumOf { it }
 
+            var weekRead = 0; var weekPlay = 0
+            val c7 = Calendar.getInstance()
+            for (i in 0 until 7) { val k = fmt.format(c7.time); weekRead += readFor(k); weekPlay += playFor(k); c7.add(Calendar.DAY_OF_YEAR, -1) }
+            var monthRead = 0; var monthPlay = 0
+            val c30 = Calendar.getInstance()
+            for (i in 0 until 30) { val k = fmt.format(c30.time); monthRead += readFor(k); monthPlay += playFor(k); c30.add(Calendar.DAY_OF_YEAR, -1) }
+
+            val activeDays30 = days.count { it.readCount > 0 || it.playCount > 0 }
+            val best = days.maxByOrNull { it.readCount + it.playCount }
+            val bestCount = (best?.readCount ?: 0) + (best?.playCount ?: 0)
+            val bestLabel = if (best != null && bestCount > 0) {
+                try { SimpleDateFormat("d MMM", Locale.forLanguageTag("id-ID")).format(fmt.parse(best.date)!!) } catch (_: Throwable) { "" }
+            } else ""
+            val avg7 = ((weekRead + weekPlay) / 7f).roundToInt()
+
             return StreakStats(
                 streakDays = streak,
                 todayRead = readFor(today),
                 todayPlay = playFor(today),
+                weekRead = weekRead,
+                weekPlay = weekPlay,
+                monthRead = monthRead,
+                monthPlay = monthPlay,
                 totalRead = totalRead,
                 totalPlay = totalPlay,
+                activeDays30 = activeDays30,
+                bestDayCount = bestCount,
+                bestDayLabel = bestLabel,
+                avgDaily7 = avg7,
                 days = days,
                 weeks = weeks,
                 months = months

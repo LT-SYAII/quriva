@@ -475,9 +475,11 @@ private fun ReaderProgressBar(
     // of invalidating the top bar or entire reader on every visible ayah.
     val progress by remember(listState, totalAyah) {
         derivedStateOf {
-            if (totalAyah <= 0) 0f else {
-                (listState.firstVisibleItemIndex.toFloat() / totalAyah.toFloat())
-                    .coerceIn(0f, 1f)
+            if (totalAyah <= 0) 0f
+            else if (!listState.canScrollForward) 1f
+            else {
+                val visible = listState.firstVisibleItemIndex.coerceIn(0, totalAyah)
+                (visible.toFloat() / totalAyah.toFloat()).coerceIn(0f, 1f)
             }
         }
     }
@@ -485,7 +487,7 @@ private fun ReaderProgressBar(
         progress = { progress },
         modifier = Modifier
             .fillMaxWidth()
-            .height(1.5.dp),
+            .height(2.dp),
         color = MaterialTheme.colorScheme.onBackground,
         trackColor = MaterialTheme.colorScheme.outlineVariant
     )
