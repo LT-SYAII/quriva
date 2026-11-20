@@ -17,7 +17,7 @@
 
 ## 🌙 Tentang Quriva
 
-**Quriva** adalah aplikasi Al-Qur'an untuk membantu umat Muslim membaca dan mendengarkan Al-Qur'an dengan lebih mudah, serta membangun kebiasaan tilawah yang istiqamah. Tampilannya dibuat bersih dan nyaman di mata, dengan fokus pada pengalaman membaca yang tenang.
+**Quriva** adalah aplikasi Al-Qur'an untuk membantu umat Muslim membaca dan mendengarkan Al-Qur'an dengan lebih mudah, serta membangun kebiasaan tilawah yang istiqamah. Tampilannya dibuat bersih, nyaman di mata, dan terasa lebih hidup dengan sentuhan animasi halus, agar pengalaman membaca dan tilawah tetap tenang.
 
 > *"Bacalah Al-Qur'an, karena ia akan datang memberi syafaat bagi para pembacanya."*
 
@@ -95,7 +95,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 1.4.0
+- **Versi:** 1.5.0
 - **Pembuat:** Bang syaii
 
 ---
@@ -107,6 +107,8 @@ Untuk mendapatkan Quriva, unduh file aplikasi (APK) versi terbaru melalui halama
 <p align="center">
   👉 <a href="https://github.com/LT-SYAII/quriva/releases"><b>Buka GitHub Releases Quriva</b></a>
 </p>
+
+- **Pembaruan dalam aplikasi:** jika kamu sudah memasang Quriva, aplikasi akan memberi tahu saat versi terbaru tersedia dan menyediakan tautan unduh langsung, tanpa perlu mencari-cari di GitHub.
 
 > **Catatan:** Saat memasang aplikasi dari luar toko aplikasi, perangkat Android mungkin meminta izin untuk menginstal dari sumber tersebut. Quriva tidak meminta akses ke kontak, lokasi, atau kamera.
 

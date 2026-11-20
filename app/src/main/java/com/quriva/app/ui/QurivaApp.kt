@@ -3,6 +3,12 @@ package com.quriva.app.ui
 import android.app.Activity
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -54,16 +60,22 @@ fun QurivaApp(prefs: AppPreferences) {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         val navController = rememberNavController()
 
+        val enter: EnterTransition = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+            scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
+        val exit: ExitTransition = fadeOut(tween(180, easing = FastOutSlowInEasing))
+        val popEnter: EnterTransition = fadeIn(tween(200, easing = FastOutSlowInEasing)) +
+            scaleIn(initialScale = 0.992f, animationSpec = tween(200, easing = FastOutSlowInEasing))
+        val popExit: ExitTransition = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
+            scaleOut(targetScale = 0.985f, animationSpec = tween(160, easing = FastOutSlowInEasing))
+
         Surface(modifier = Modifier.fillMaxSize()) {
             NavHost(
                 navController = navController,
                 startDestination = "home",
-                // Full-screen alpha transitions are expensive on older GPUs.
-                // Instant navigation keeps scrolling and screen changes crisp.
-                enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None }
+                enterTransition = { enter },
+                exitTransition = { exit },
+                popEnterTransition = { popEnter },
+                popExitTransition = { popExit }
             ) {
                 composable("home") {
                     HomeScreen(

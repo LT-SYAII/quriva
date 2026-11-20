@@ -109,6 +109,11 @@ class AppPreferences(context: Context) {
     var skipMessageText by mutableStateOf(prefs.getString(KEY_SKIP_MSG_TEXT, "") ?: "")
         private set
 
+    var lastUpdateCheckMs by mutableLongStateOf(prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L))
+        private set
+    var dismissedUpdateTag by mutableStateOf(prefs.getString(KEY_DISMISSED_UPDATE, "") ?: "")
+        private set
+
     fun updateThemeMode(mode: String) {
         themeMode = mode
         prefs.edit().putString(KEY_THEME, mode).apply()
@@ -395,6 +400,21 @@ class AppPreferences(context: Context) {
         }
     }
 
+    fun markUpdateChecked() {
+        lastUpdateCheckMs = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, lastUpdateCheckMs).apply()
+    }
+
+    fun dismissUpdateTag(tag: String) {
+        dismissedUpdateTag = tag
+        prefs.edit().putString(KEY_DISMISSED_UPDATE, tag).apply()
+    }
+
+    fun clearDismissedUpdate() {
+        dismissedUpdateTag = ""
+        prefs.edit().remove(KEY_DISMISSED_UPDATE).apply()
+    }
+
     private fun trimDaily(dayMap: MutableMap<String, Set<String>>): Map<String, Set<String>> =
         dayMap.entries.sortedByDescending { it.key }.take(120).associate { it.key to it.value }
 
@@ -618,6 +638,8 @@ class AppPreferences(context: Context) {
         const val KEY_LAST_AUDIO_POS = "last_audio_pos"
         const val KEY_SKIP_MSG_DATE = "skip_msg_date"
         const val KEY_SKIP_MSG_TEXT = "skip_msg_text"
+        const val KEY_LAST_UPDATE_CHECK = "last_update_check_ms"
+        const val KEY_DISMISSED_UPDATE = "dismissed_update_tag"
         const val MAX_BOOKMARKS = 1000
         const val MAX_NOTES = 1000
     }

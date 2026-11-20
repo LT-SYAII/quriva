@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,17 +16,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -34,6 +40,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,8 +59,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
+import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.ReminderScheduler
+import com.quriva.app.data.UpdateCheckResult
+import com.quriva.app.data.UpdateRepository
 import com.quriva.app.ui.theme.ArabicFontFamily
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val PREVIEW_BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"
@@ -62,6 +79,12 @@ fun SettingsSheet(
 ) {
     val colors = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+    var foundUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    val currentVersion = remember { UpdateRepository.currentVersionName(context) }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -93,6 +116,29 @@ fun SettingsSheet(
             } else {
                 prefs.updateReminder(true)
                 ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
+            }
+        }
+    }
+
+    fun checkUpdateNow() {
+        if (checkingUpdate) return
+        checkingUpdate = true
+        updateStatus = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { UpdateRepository.checkForUpdate(context) }
+            prefs.markUpdateChecked()
+            checkingUpdate = false
+            when (result) {
+                is UpdateCheckResult.UpToDate -> {
+                    updateStatus = "Kamu sudah menggunakan versi terbaru (v$currentVersion)."
+                }
+                is UpdateCheckResult.Available -> {
+                    updateStatus = "Pembaruan ${result.info.tagName} tersedia."
+                    foundUpdate = result.info
+                }
+                is UpdateCheckResult.Error -> {
+                    updateStatus = result.message
+                }
             }
         }
     }
@@ -192,12 +238,12 @@ fun SettingsSheet(
                 border = BorderStroke(1.dp, colors.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
                     Text("TENTANG APLIKASI", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, color = colors.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     AboutRow("Nama aplikasi", "Quriva")
                     Spacer(Modifier.height(6.dp))
-                    AboutRow("Versi", "1.4.0")
+                    AboutRow("Versi", currentVersion)
                     Spacer(Modifier.height(6.dp))
                     AboutRow("Pembuat", "Bang syaii")
                     Spacer(Modifier.height(10.dp))
@@ -205,6 +251,38 @@ fun SettingsSheet(
                         "Aplikasi Al-Qur'an sederhana untuk membaca, mendengar, dan menjaga kebiasaan tilawah harian.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedButton(
+                        onClick = { checkUpdateNow() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, colors.outline),
+                        enabled = !checkingUpdate
+                    ) {
+                        if (checkingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = colors.onBackground)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Memeriksa…", color = colors.onBackground)
+                        } else {
+                            Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.onBackground)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Periksa pembaruan", color = colors.onBackground)
+                        }
+                    }
+                    AnimatedVisibility(visible = !updateStatus.isNullOrBlank()) {
+                        Text(
+                            text = updateStatus.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Pembaruan akan diperiksa otomatis saat aplikasi dibuka, dan kamu juga bisa mengunduh APK terbaru langsung dari sini tanpa perlu membuka GitHub.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -219,6 +297,26 @@ fun SettingsSheet(
                 Text("Selesai", modifier = Modifier.padding(vertical = 4.dp))
             }
         }
+    }
+
+    val update = foundUpdate
+    if (update != null) {
+        UpdateAvailableDialog(
+            info = update,
+            currentVersion = currentVersion,
+            onDismiss = { foundUpdate = null },
+            onSkipVersion = {
+                prefs.dismissUpdateTag(update.tagName)
+                foundUpdate = null
+            },
+            onDownload = {
+                val url = update.apkDownloadUrl ?: update.htmlUrl
+                UpdateRepository.openUrl(context, url)
+            },
+            onOpenRelease = {
+                UpdateRepository.openUrl(context, update.htmlUrl)
+            }
+        )
     }
 }
 

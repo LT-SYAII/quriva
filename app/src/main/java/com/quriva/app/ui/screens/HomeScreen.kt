@@ -1,12 +1,25 @@
 package com.quriva.app.ui.screens
 
 import android.app.Application
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +36,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -54,11 +68,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -72,8 +87,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
+import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.DailyContent
 import com.quriva.app.data.ReminderScheduler
+import com.quriva.app.data.UpdateCheckResult
+import com.quriva.app.data.UpdateRepository
 import com.quriva.app.model.LastRead
 import com.quriva.app.model.SearchResult
 import com.quriva.app.model.SurahMeta
@@ -81,7 +99,10 @@ import com.quriva.app.ui.HomeUiState
 import com.quriva.app.ui.HomeViewModel
 import com.quriva.app.ui.HomeViewModelFactory
 import com.quriva.app.ui.ProgressViewModel
+import com.quriva.app.ui.UpdateAvailableDialog
 import com.quriva.app.ui.theme.ArabicFontFamily
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class SurahFilter(val label: String) {
     ALL("Semua"),
@@ -146,91 +167,142 @@ fun HomeScreen(
 
     val streak = ProgressViewModel.compute(prefs)
     val skipMessage = if (prefs.skipMessageDate.isNotBlank()) prefs.skipMessageText else ""
+    var pendingUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
-            state = listState,
-            contentPadding = PaddingValues(bottom = 32.dp)
-        ) {
-            item {
-                HomeHeader(
-                    onOpenSearch = onOpenSearch,
-                    onOpenBookmarks = onOpenBookmarks,
-                    onOpenSettings = onOpenSettings
-                )
-            }
-
-            when (state) {
-                is HomeUiState.Loading -> {
-                    item { SearchSkeleton() }
-                    items(count = 8) { SkeletonSurahRow() }
-                }
-
-                is HomeUiState.Error -> {
-                    item {
-                        ErrorState(
-                            message = (state as HomeUiState.Error).message,
-                            onRetry = viewModel::load
-                        )
+    LaunchedEffect(Unit) {
+        val now = System.currentTimeMillis()
+        if (now - prefs.lastUpdateCheckMs >= 12L * 60 * 60 * 1000) {
+            when (val result = withContext(Dispatchers.IO) { UpdateRepository.checkForUpdate(context) }) {
+                is UpdateCheckResult.Available -> {
+                    prefs.markUpdateChecked()
+                    if (result.info.tagName != prefs.dismissedUpdateTag) {
+                        pendingUpdate = result.info
                     }
                 }
+                is UpdateCheckResult.UpToDate -> prefs.markUpdateChecked()
+                is UpdateCheckResult.Error -> { /* silent on auto-check */ }
+            }
+        }
+    }
 
-                is HomeUiState.Success -> {
-                    if (skipMessage.isNotBlank()) {
-                        item {
-                            SkipMessageCard(
-                                message = skipMessage,
-                                onDismiss = { prefs.dismissSkipMessage() }
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        AnimatedContent(
+            targetState = state,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+            label = "homeState"
+        ) { uiState ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+                state = listState,
+                contentPadding = PaddingValues(bottom = 32.dp)
+            ) {
+                item(key = "header") {
+                    HomeHeader(
+                        onOpenSearch = onOpenSearch,
+                        onOpenBookmarks = onOpenBookmarks,
+                        onOpenSettings = onOpenSettings
+                    )
+                }
+
+                when (uiState) {
+                    is HomeUiState.Loading -> {
+                        item(key = "search_skeleton") { SearchSkeleton() }
+                        items(count = 8, key = { "sk_$it" }) { SkeletonSurahRow() }
+                    }
+
+                    is HomeUiState.Error -> {
+                        item(key = "error") {
+                            ErrorState(
+                                message = uiState.message,
+                                onRetry = viewModel::load
                             )
                         }
                     }
-                    item {
-                        ContinueReadingCard(lastRead = prefs.lastRead, onOpen = onOpenSurah)
-                    }
-                    item {
-                        StreakSummaryCard(
-                            streakDays = streak.streakDays,
-                            todayRead = streak.todayRead,
-                            todayPlay = streak.todayPlay,
-                            weekTotal = streak.weekRead + streak.weekPlay,
-                            activeDays30 = streak.activeDays30,
-                            onOpen = onOpenProgress
-                        )
-                    }
-                    item {
-                        ExploreSection(
-                            onOpenSearch = onOpenSearch,
-                            onOpenBookmarks = onOpenBookmarks,
-                            onOpenJuz = onOpenJuz,
-                            onOpenProgress = onOpenProgress,
-                            onOpenNotes = onOpenNotes,
-                            onOpenPages = onOpenPages,
-                            onOpenAyahOfDay = {
-                                ayahOfDay?.let { onOpenSurah(it.surahNumber, it.ayahNumber) }
+
+                    is HomeUiState.Success -> {
+                        item(key = "skip") {
+                            AnimatedVisibility(
+                                visible = skipMessage.isNotBlank(),
+                                enter = fadeIn(tween(220)) + expandVertically(),
+                                exit = fadeOut(tween(180)) + shrinkVertically()
+                            ) {
+                                SkipMessageCard(
+                                    message = skipMessage,
+                                    onDismiss = { prefs.dismissSkipMessage() }
+                                )
                             }
-                        )
-                    }
-                    item {
-                        SearchAndFilters(
-                            query = query,
-                            onQueryChange = { query = it },
-                            filter = filter,
-                            onFilterChange = { filterKey = it.name }
-                        )
-                    }
-                    item { SectionHeader(count = visibleSurahs.size) }
-                    items(items = visibleSurahs, key = { it.number }, contentType = { "surah" }) { surah ->
-                        SurahRow(surah = surah, onClick = { onOpenSurah(surah.number, 1) })
-                    }
-                    if (visibleSurahs.isEmpty()) {
-                        item { EmptyState(query) }
+                        }
+                        item(key = "continue") {
+                            ContinueReadingCard(lastRead = prefs.lastRead, onOpen = onOpenSurah)
+                        }
+                        item(key = "streak") {
+                            StreakSummaryCard(
+                                streakDays = streak.streakDays,
+                                todayRead = streak.todayRead,
+                                todayPlay = streak.todayPlay,
+                                weekTotal = streak.weekRead + streak.weekPlay,
+                                activeDays30 = streak.activeDays30,
+                                onOpen = onOpenProgress
+                            )
+                        }
+                        item(key = "explore") {
+                            ExploreSection(
+                                onOpenSearch = onOpenSearch,
+                                onOpenBookmarks = onOpenBookmarks,
+                                onOpenJuz = onOpenJuz,
+                                onOpenProgress = onOpenProgress,
+                                onOpenNotes = onOpenNotes,
+                                onOpenPages = onOpenPages,
+                                onOpenAyahOfDay = {
+                                    ayahOfDay?.let { onOpenSurah(it.surahNumber, it.ayahNumber) }
+                                }
+                            )
+                        }
+                        item(key = "search_filters") {
+                            SearchAndFilters(
+                                query = query,
+                                onQueryChange = { query = it },
+                                filter = filter,
+                                onFilterChange = { filterKey = it.name }
+                            )
+                        }
+                        item(key = "section_header") {
+                            SectionHeader(count = visibleSurahs.size)
+                        }
+                        items(items = visibleSurahs, key = { it.number }, contentType = { "surah" }) { surah ->
+                            Box(modifier = Modifier.animateItem()) {
+                                SurahRow(surah = surah, onClick = { onOpenSurah(surah.number, 1) })
+                            }
+                        }
+                        if (visibleSurahs.isEmpty()) {
+                            item(key = "empty") { EmptyState(query) }
+                        }
                     }
                 }
             }
         }
+    }
+
+    val update = pendingUpdate
+    if (update != null) {
+        UpdateAvailableDialog(
+            info = update,
+            currentVersion = UpdateRepository.currentVersionName(context),
+            onDismiss = { pendingUpdate = null },
+            onSkipVersion = {
+                prefs.dismissUpdateTag(update.tagName)
+                pendingUpdate = null
+            },
+            onDownload = {
+                val url = update.apkDownloadUrl ?: update.htmlUrl
+                UpdateRepository.openUrl(context, url)
+            },
+            onOpenRelease = {
+                UpdateRepository.openUrl(context, update.htmlUrl)
+            }
+        )
     }
 }
 
@@ -282,8 +354,17 @@ private fun HomeHeader(
 @Composable
 private fun SkipMessageCard(message: String, onDismiss: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "skipScale")
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
+        onClick = onDismiss,
+        interactionSource = interaction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 12.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
         shape = RoundedCornerShape(18.dp),
         color = colors.surfaceVariant,
         border = BorderStroke(1.dp, colors.outlineVariant)
@@ -292,9 +373,7 @@ private fun SkipMessageCard(message: String, onDismiss: () -> Unit) {
             Icon(painter = painterResource(R.drawable.ic_book_open), contentDescription = null, tint = colors.onBackground, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(message, style = MaterialTheme.typography.bodySmall, color = colors.onBackground, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                Icon(painter = painterResource(R.drawable.ic_close), contentDescription = "Tutup", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-            }
+            Icon(painter = painterResource(R.drawable.ic_close), contentDescription = "Tutup", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -306,11 +385,19 @@ private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit)
     val ayah = lastRead?.ayah ?: 1
     val name = lastRead?.surahName ?: "Al-Fatihah"
     val total = lastRead?.totalAyah ?: 7
-    val progress = (ayah.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+    val targetProgress = (ayah.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetValue = targetProgress, animationSpec = tween(700), label = "continueProgress")
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.975f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), label = "continueScale")
 
     Card(
         onClick = { onOpen(surahNumber, ayah) },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        interactionSource = interaction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = colors.inverseSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -370,12 +457,23 @@ private fun StreakSummaryCard(
 ) {
     val colors = MaterialTheme.colorScheme
     val todayTotal = todayRead + todayPlay
-    val ringProgress = (streakDays / 30f).coerceIn(0f, 1f)
+    val targetRing = (streakDays / 30f).coerceIn(0f, 1f)
+    val ringProgress by animateFloatAsState(targetRing, tween(800), label = "ring")
     val dailyGoal = 20
-    val dailyProgress = (todayTotal / dailyGoal.toFloat()).coerceIn(0f, 1f)
+    val targetDaily = (todayTotal / dailyGoal.toFloat()).coerceIn(0f, 1f)
+    val dailyProgress by animateFloatAsState(targetDaily, tween(700), label = "daily")
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.975f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), label = "streakScale")
+
     Surface(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 14.dp),
+        interactionSource = interaction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(top = 14.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
         shape = RoundedCornerShape(26.dp),
         color = colors.inverseSurface
     ) {
@@ -472,9 +570,13 @@ private fun ExploreSection(
 @Composable
 private fun IconOnlyTile(icon: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "tileScale")
     Surface(
         onClick = onClick,
-        modifier = modifier.height(64.dp),
+        interactionSource = interaction,
+        modifier = modifier.height(64.dp).graphicsLayer { scaleX = scale; scaleY = scale },
         shape = RoundedCornerShape(18.dp),
         color = colors.surfaceVariant,
         contentColor = colors.onBackground,
@@ -496,7 +598,7 @@ private fun SearchAndFilters(
     val colors = MaterialTheme.colorScheme
     val focusManager = LocalFocusManager.current
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 24.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 24.dp).animateContentSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -504,7 +606,7 @@ private fun SearchAndFilters(
             placeholder = { Text("Cari surah, arti, atau nomor", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) },
             leadingIcon = { Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
             trailingIcon = {
-                if (query.isNotEmpty()) {
+                AnimatedVisibility(visible = query.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                     IconButton(onClick = { onQueryChange("") }) {
                         Icon(painter = painterResource(R.drawable.ic_close), contentDescription = "Hapus pencarian", tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
@@ -535,8 +637,13 @@ private fun SearchAndFilters(
 @Composable
 private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "pill")
     Surface(
         onClick = onClick,
+        interactionSource = interaction,
+        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
         shape = CircleShape,
         color = if (selected) colors.onBackground else Color.Transparent,
         contentColor = if (selected) colors.background else colors.onSurfaceVariant,
@@ -561,7 +668,16 @@ private fun SectionHeader(count: Int) {
 @Composable
 private fun SurahRow(surah: SurahMeta, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "row")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .animateContentSize()
+    ) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.fillMaxSize(), shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, colors.outline)) {}

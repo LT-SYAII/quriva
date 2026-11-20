@@ -1,9 +1,15 @@
 package com.quriva.app.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,6 +102,7 @@ fun ProgressScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 28.dp)
+                    .animateContentSize()
             ) {
                 Spacer(Modifier.height(6.dp))
                 HeroStreakCard(stats)
@@ -127,10 +134,16 @@ fun ProgressScreen(
                 }
                 Spacer(Modifier.height(14.dp))
 
-                when (range) {
-                    StreakRange.DAILY -> DailyView(stats)
-                    StreakRange.WEEKLY -> WeeklyView(stats)
-                    StreakRange.MONTHLY -> MonthlyView(stats)
+                AnimatedContent(
+                    targetState = range,
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                    label = "streakRange"
+                ) { r ->
+                    when (r) {
+                        StreakRange.DAILY -> DailyView(stats)
+                        StreakRange.WEEKLY -> WeeklyView(stats)
+                        StreakRange.MONTHLY -> MonthlyView(stats)
+                    }
                 }
 
                 Spacer(Modifier.height(18.dp))
@@ -150,7 +163,8 @@ fun ProgressScreen(
 private fun HeroStreakCard(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
     val target = 30f
-    val progress = (stats.streakDays / target).coerceIn(0f, 1f)
+    val targetProgress = (stats.streakDays / target).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetProgress, tween(900), label = "heroRing")
     Surface(
         shape = RoundedCornerShape(30.dp),
         color = colors.inverseSurface,
@@ -161,7 +175,6 @@ private fun HeroStreakCard(stats: StreakStats) {
                 modifier = Modifier
                     .size(180.dp)
                     .align(Alignment.TopEnd)
-                    .padding(top = 0.dp)
                     .background(
                         Brush.radialGradient(
                             listOf(colors.inverseOnSurface.copy(alpha = 0.12f), Color.Transparent)
@@ -219,13 +232,16 @@ private fun HeroStreakCard(stats: StreakStats) {
 private fun TodayDashboard(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
     val todayTotal = stats.todayRead + stats.todayPlay
+    val goal = 20
+    val targetP = (todayTotal / goal.toFloat()).coerceIn(0f, 1f)
+    val p by animateFloatAsState(targetP, tween(700), label = "todayGoal")
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = colors.surfaceVariant,
         border = BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(18.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Hari Ini", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
                 Spacer(Modifier.weight(1f))
@@ -238,8 +254,6 @@ private fun TodayDashboard(stats: StreakStats) {
                 MiniMetric("Rata-rata", "${stats.avgDaily7}", "/hari", Modifier.weight(1f))
             }
             Spacer(Modifier.height(12.dp))
-            val goal = 20
-            val p = (todayTotal / goal.toFloat()).coerceIn(0f, 1f)
             LinearProgressIndicator(
                 progress = { p },
                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
@@ -291,7 +305,7 @@ private fun InsightCard(title: String, value: String, sub: String, modifier: Mod
 private fun DailyView(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
     Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceVariant, border = BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Kalender Aktivitas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
                 Spacer(Modifier.weight(1f))
@@ -308,12 +322,13 @@ private fun DailyView(stats: StreakStats) {
             recent.forEach { d ->
                 val total = d.readCount + d.playCount
                 val label = dayLabel(d.date)
+                val targetW = (total / 40f).coerceIn(0f, 1f)
+                val w by animateFloatAsState(targetW, tween(500), label = "daybar")
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(label, style = MaterialTheme.typography.labelMedium, color = colors.onBackground, modifier = Modifier.weight(1f))
                     Text("${d.readCount} baca · ${d.playCount} putar", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.width(46.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.outlineVariant)) {
-                        val w = (total / 40f).coerceIn(0f, 1f)
                         Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(w).background(colors.onBackground, RoundedCornerShape(3.dp)))
                     }
                 }
@@ -325,11 +340,7 @@ private fun DailyView(stats: StreakStats) {
 @Composable
 private fun Heatmap(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
-    val dayNames = listOf("S", "S", "R", "K", "J", "S", "M")
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-            dayNames.forEach { _ -> Spacer(Modifier.weight(1f)) }
-        }
         stats.days.chunked(7).forEach { week ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                 week.forEach { d ->
@@ -342,18 +353,9 @@ private fun Heatmap(stats: StreakStats) {
                         else -> colors.background to colors.onSurfaceVariant
                     }
                     val dayNum = try { SimpleDateFormat("d", Locale.forLanguageTag("id-ID")).format(SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(d.date)!!) } catch (_: Throwable) { "" }
-                    Box(
-                        modifier = Modifier.weight(1f).height(32.dp).clip(RoundedCornerShape(8.dp)).background(bg)
-                            .then(if (total == 0) Modifier.background(bg).let { Modifier } else Modifier),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (total == 0) {
-                            Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(colors.background).let { Modifier })
-                        }
-                        Surface(color = bg, shape = RoundedCornerShape(8.dp), border = if (total == 0) BorderStroke(1.dp, colors.outlineVariant) else null) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(dayNum, style = MaterialTheme.typography.labelSmall, color = fg)
-                            }
+                    Surface(color = bg, shape = RoundedCornerShape(8.dp), border = if (total == 0) BorderStroke(1.dp, colors.outlineVariant) else null, modifier = Modifier.weight(1f).height(32.dp)) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(dayNum, style = MaterialTheme.typography.labelSmall, color = fg)
                         }
                     }
                 }
@@ -380,13 +382,14 @@ private fun WeeklyView(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
     val maxVal = max(1, stats.weeks.maxOfOrNull { it.readCount + it.playCount } ?: 1)
     Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceVariant, border = BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
             Text("Tren 8 Minggu", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
             Spacer(Modifier.height(14.dp))
             Row(modifier = Modifier.fillMaxWidth().height(140.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                 stats.weeks.forEach { w ->
                     val total = w.readCount + w.playCount
-                    val h = (total / maxVal.toFloat()).coerceIn(0.06f, 1f)
+                    val targetH = (total / maxVal.toFloat()).coerceIn(0.06f, 1f)
+                    val h by animateFloatAsState(targetH, tween(600), label = "bar")
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("$total", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                         Spacer(Modifier.height(4.dp))
@@ -418,17 +421,18 @@ private fun MonthlyView(stats: StreakStats) {
     val colors = MaterialTheme.colorScheme
     val maxVal = max(1, stats.months.maxOfOrNull { it.readCount + it.playCount } ?: 1)
     Surface(shape = RoundedCornerShape(24.dp), color = colors.surfaceVariant, border = BorderStroke(1.dp, colors.outlineVariant), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
             Text("Ringkasan 6 Bulan", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
             Spacer(Modifier.height(14.dp))
             stats.months.forEach { m ->
                 val total = m.readCount + m.playCount
-                val p = total / maxVal.toFloat()
+                val targetP = (total / maxVal.toFloat()).coerceIn(0f, 1f)
+                val p by animateFloatAsState(targetP, tween(600), label = "month")
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(m.label, style = MaterialTheme.typography.labelLarge, color = colors.onBackground, modifier = Modifier.width(72.dp))
                         Box(modifier = Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(5.dp)).background(colors.outlineVariant)) {
-                            Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(p.coerceIn(0f, 1f)).background(colors.onBackground, RoundedCornerShape(5.dp)))
+                            Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(p).background(colors.onBackground, RoundedCornerShape(5.dp)))
                         }
                         Spacer(Modifier.width(10.dp))
                         Text("$total", style = MaterialTheme.typography.labelMedium, color = colors.onBackground)
