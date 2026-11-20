@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+.gradle-tmp/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin/IDE
+.kotlin/
+.idea/
+*.iml
+local.properties
+
+# Android
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.apks
+*.keystore
+*.jks
+
+# OS/misc
+.DS_Store
+Thumbs.db
+*.log
+
+# Generated at root (optional artifacts)
+/Quriva-*.apk
+/Quriva-*.zip
+/icon_source.jpg
