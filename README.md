@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" alt="Ikon Quriva" width="120" height="120" />
+  <img src="https://files.catbox.moe/4jcyx6.jpg" alt="Ikon Quriva"/>
 </p>
 
 <h1 align="center">Quriva</h1>
@@ -114,6 +114,7 @@ Untuk mendapatkan Quriva, unduh file aplikasi (APK) versi terbaru melalui halama
 
 ---
 
+![Icon App](https://files.catbox.moe/rnwuzs.png)
 ## 📄 Lisensi
 
 Quriva adalah aplikasi **open source** (lisensi MIT). Rincian lisensi kode tersedia pada berkas [LICENSE](LICENSE).
