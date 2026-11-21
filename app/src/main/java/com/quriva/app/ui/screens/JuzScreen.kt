@@ -2,7 +2,6 @@ package com.quriva.app.ui.screens
 
 import android.app.Application
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -48,6 +47,8 @@ import com.quriva.app.model.JuzMeta
 import com.quriva.app.ui.JuzUiState
 import com.quriva.app.ui.JuzViewModel
 import com.quriva.app.ui.JuzViewModelFactory
+import com.quriva.app.ui.AnimatedListItem
+import com.quriva.app.ui.interactiveClickable
 
 @Composable
 fun JuzScreen(
@@ -154,17 +155,19 @@ fun JuzScreen(
                         contentPadding = PaddingValues(bottom = 28.dp)
                     ) {
                         item { JuzIntro() }
-                        items(
+                        itemsIndexed(
                             items = current.juzs,
-                            key = { it.number },
-                            contentType = { "juz" }
-                        ) { juz ->
-                            JuzRow(
-                                juz = juz,
-                                startName = names[juz.startSurah]?.latinName ?: "Surah ${juz.startSurah}",
-                                endName = names[juz.endSurah]?.latinName ?: "Surah ${juz.endSurah}",
-                                onClick = { onOpenAyah(juz.startSurah, juz.startAyah) }
-                            )
+                            key = { _, juz -> juz.number },
+                            contentType = { _, _ -> "juz" }
+                        ) { index, juz ->
+                            AnimatedListItem(index = index) {
+                                JuzRow(
+                                    juz = juz,
+                                    startName = names[juz.startSurah]?.latinName ?: "Surah ${juz.startSurah}",
+                                    endName = names[juz.endSurah]?.latinName ?: "Surah ${juz.endSurah}",
+                                    onClick = { onOpenAyah(juz.startSurah, juz.startAyah) }
+                                )
+                            }
                         }
                     }
                 }
@@ -228,7 +231,7 @@ private fun JuzRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .interactiveClickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier

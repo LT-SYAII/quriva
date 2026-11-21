@@ -2,6 +2,7 @@ package com.quriva.app.ui
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -25,7 +26,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     var results by mutableStateOf<List<SearchResult>>(emptyList())
         private set
 
-    var totalResults by mutableStateOf(0)
+    var totalResults by mutableIntStateOf(0)
         private set
 
     var isSearching by mutableStateOf(false)

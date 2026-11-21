@@ -1,6 +1,7 @@
 package com.quriva.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -26,17 +27,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +55,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.quriva.app.R
 import com.quriva.app.data.AppUpdateInfo
+import com.quriva.app.data.UpdateDownloader
+import com.quriva.app.data.UpdateRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun UpdateAvailableDialog(
@@ -53,16 +67,23 @@ fun UpdateAvailableDialog(
     currentVersion: String,
     onDismiss: () -> Unit,
     onSkipVersion: () -> Unit,
-    onDownload: () -> Unit,
     onOpenRelease: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    val visibleState = remember {
+        MutableTransitionState(false).apply { targetState = true }
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         AnimatedVisibility(
-            visible = true,
+            visibleState = visibleState,
             enter = fadeIn() + scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)),
             exit = fadeOut() + scaleOut(targetScale = 0.96f)
         ) {
@@ -157,17 +178,87 @@ fun UpdateAvailableDialog(
 
                         Spacer(Modifier.height(16.dp))
                         Button(
-                            onClick = onDownload,
+                            onClick = {
+                                val url = info.apkDownloadUrl
+                                if (url.isNullOrBlank()) {
+                                    onOpenRelease()
+                                } else if (!downloading) {
+                                    downloading = true
+                                    downloadProgress = 0f
+                                    downloadError = null
+                                    scope.launch {
+                                        try {
+                                            val file = UpdateDownloader.download(
+                                                context = context,
+                                                url = url,
+                                                expectedSize = info.apkSize,
+                                                onProgress = { downloadProgress = it }
+                                            )
+                                            when (UpdateDownloader.install(context, file, info.versionName)) {
+                                                UpdateDownloader.InstallResult.STARTED -> onDismiss()
+                                                UpdateDownloader.InstallResult.PERMISSION_REQUIRED -> {
+                                                    downloadError = "Izinkan pemasangan dari Quriva, lalu tekan tombol unduh lagi."
+                                                }
+                                                UpdateDownloader.InstallResult.INVALID_APK -> {
+                                                    downloadError = "Berkas pembaruan tidak valid. Coba unduh lagi."
+                                                }
+                                                UpdateDownloader.InstallResult.FAILED -> {
+                                                    downloadError = "Pemasang Android tidak dapat dibuka. Coba lagi."
+                                                }
+                                            }
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (t: Throwable) {
+                                            downloadError = UpdateRepository.friendlyError(t)
+                                        } finally {
+                                            downloading = false
+                                        }
+                                    }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             shape = CircleShape,
+                            enabled = !downloading,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = colors.onBackground,
                                 contentColor = colors.background
                             )
                         ) {
-                            Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(16.dp))
+                            if (downloading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = colors.background
+                                )
+                            } else {
+                                Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
                             Spacer(Modifier.width(8.dp))
-                            Text(if (info.apkDownloadUrl != null) "Unduh pembaruan (APK)" else "Buka halaman unduh", modifier = Modifier.padding(vertical = 3.dp))
+                            val sizeLabel = if (info.apkSize > 0) " · ${formatBytes(info.apkSize)}" else ""
+                            Text(
+                                when {
+                                    downloading -> "Mengunduh… ${(downloadProgress * 100).roundToInt()}%"
+                                    info.apkDownloadUrl != null -> "Unduh pembaruan$sizeLabel"
+                                    else -> "Buka halaman unduh"
+                                },
+                                modifier = Modifier.padding(vertical = 3.dp)
+                            )
+                        }
+                        AnimatedVisibility(visible = downloading) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(3.dp),
+                                color = colors.onBackground,
+                                trackColor = colors.outlineVariant
+                            )
+                        }
+                        AnimatedVisibility(visible = !downloadError.isNullOrBlank()) {
+                            Text(
+                                text = downloadError.orEmpty(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onBackground,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -200,4 +291,10 @@ fun UpdateAvailableDialog(
             }
         }
     }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
+    bytes >= 1024L -> "${bytes / 1024L} KB"
+    else -> "$bytes B"
 }

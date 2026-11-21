@@ -1,8 +1,5 @@
 package com.quriva.app.ui.screens
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,8 +14,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,7 +41,10 @@ import androidx.compose.ui.unit.sp
 import com.quriva.app.R
 import com.quriva.app.data.PageAyah
 import com.quriva.app.data.QuranApi
+import com.quriva.app.ui.AnimatedListItem
+import com.quriva.app.ui.interactiveClickable
 import com.quriva.app.ui.theme.ArabicFontFamily
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun PageDetailScreen(
@@ -56,12 +56,15 @@ fun PageDetailScreen(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var verses by remember { mutableStateOf<List<PageAyah>>(emptyList()) }
+    var reloadKey by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(page) {
+    LaunchedEffect(page, reloadKey) {
         loading = true
         error = null
         try {
             verses = QuranApi.versesByPage(page)
+        } catch (e: CancellationException) {
+            throw e
         } catch (t: Throwable) {
             error = QuranApi.friendlyNetworkError(t)
         } finally {
@@ -103,17 +106,30 @@ fun PageDetailScreen(
                         Spacer(Modifier.height(8.dp))
                         Text(error ?: "", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = { /* retry by recomposition via key not needed; simple */ }, enabled = false, colors = ButtonDefaults.buttonColors(containerColor = colors.onBackground, contentColor = colors.background)) { Text("Muat ulang") }
+                        Button(
+                            onClick = { reloadKey++ },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.onBackground,
+                                contentColor = colors.background
+                            )
+                        ) { Text("Muat ulang") }
                     }
                 }
                 else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                    items(verses, key = { it.verseKey }) { v ->
-                        Column(modifier = Modifier.fillMaxWidth().clickable { onOpenAyah(v.surah, v.ayah) }.padding(horizontal = 24.dp, vertical = 14.dp)) {
-                            Text("${v.verseKey} · Juz ${v.juz}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Text(v.text, fontFamily = ArabicFontFamily, fontSize = 24.sp, lineHeight = 42.sp, color = colors.onBackground, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+                    itemsIndexed(verses, key = { _, v -> v.verseKey }) { index, v ->
+                        AnimatedListItem(index = index) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .interactiveClickable { onOpenAyah(v.surah, v.ayah) }
+                                    .padding(horizontal = 24.dp, vertical = 14.dp)
+                            ) {
+                                Text("${v.verseKey} · Juz ${v.juz}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                                Text(v.text, fontFamily = ArabicFontFamily, fontSize = 24.sp, lineHeight = 42.sp, color = colors.onBackground, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+                            }
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = colors.outlineVariant)
                         }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = colors.outlineVariant)
                     }
                     if (verses.isEmpty()) {
                         item { Text("Tidak ada ayat pada halaman ini.", modifier = Modifier.padding(24.dp), color = colors.onSurfaceVariant) }

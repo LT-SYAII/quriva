@@ -1,7 +1,6 @@
 package com.quriva.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,7 +14,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
+import com.quriva.app.ui.AnimatedListItem
+import com.quriva.app.ui.interactiveClickable
 
 @Composable
 fun NotesScreen(
@@ -74,19 +75,21 @@ fun NotesScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
-                    items(notes, key = { "${it.surahNumber}:${it.ayahNumber}" }) { note ->
-                        Column(modifier = Modifier.fillMaxWidth().clickable { onOpenAyah(note.surahNumber, note.ayahNumber) }) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${note.surahName} · ${note.surahNumber}:${note.ayahNumber}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, modifier = Modifier.weight(1f))
-                                    IconButton(onClick = { prefs.removeNote(note.surahNumber, note.ayahNumber) }, modifier = Modifier.size(32.dp)) {
-                                        Icon(painter = painterResource(R.drawable.ic_delete), contentDescription = "Hapus catatan", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    itemsIndexed(notes, key = { _, note -> "${note.surahNumber}:${note.ayahNumber}" }) { index, note ->
+                        AnimatedListItem(index = index) {
+                            Column(modifier = Modifier.fillMaxWidth().interactiveClickable { onOpenAyah(note.surahNumber, note.ayahNumber) }) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${note.surahName} · ${note.surahNumber}:${note.ayahNumber}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, modifier = Modifier.weight(1f))
+                                        IconButton(onClick = { prefs.removeNote(note.surahNumber, note.ayahNumber) }, modifier = Modifier.size(32.dp)) {
+                                            Icon(painter = painterResource(R.drawable.ic_delete), contentDescription = "Hapus catatan", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                        }
                                     }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(note.text, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis)
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                Text(note.text, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = colors.outlineVariant)
                             }
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = colors.outlineVariant)
                         }
                     }
                 }

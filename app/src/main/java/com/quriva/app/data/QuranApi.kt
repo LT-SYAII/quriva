@@ -9,7 +9,6 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
-import java.net.URLEncoder
 import java.net.UnknownHostException
 
 @Immutable
@@ -114,7 +113,7 @@ object Translations {
         TranslationOption(134, "King Fahad Quran Complex", "King Fahad", "Indonesia"),
         TranslationOption(141, "The Sabiq Company", "Sabiq", "Indonesia"),
         TranslationOption(20, "Saheeh International", "Saheeh International", "Inggris"),
-        TranslationOption(131, "Dr. Mustafa Khattab (The Clear Quran)", "Mustafa Khattab", "Inggris"),
+        TranslationOption(84, "T. Usmani", "Mufti Taqi Usmani", "Inggris"),
         TranslationOption(85, "M.A.S. Abdel Haleem", "Abdul Haleem", "Inggris"),
         TranslationOption(22, "Pickthall", "Pickthall", "Inggris"),
         TranslationOption(19, "Yusuf Ali", "Yusuf Ali", "Inggris")
@@ -178,16 +177,30 @@ object QuranApi {
             val all = ArrayList<VerseText>(300)
             var page = 1
             while (true) {
-                val url =
-                    "$BASE/quran/translations/$translationId?chapter_number=$surahNumber&per_page=50&page=$page"
+                // The /quran/translations endpoint omits verse_key, so use the
+                // verses endpoint which returns the key together with the text.
+                val url = "$BASE/verses/by_chapter/$surahNumber" +
+                    "?translations=$translationId&fields=text_uthmani&per_page=50&page=$page"
                 val json = getJson(url)
-                val arr = json.optJSONArray("translations") ?: JSONArray()
+                val arr = json.optJSONArray("verses") ?: JSONArray()
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
-                    all += VerseText(
-                        verseKey = o.optString("verse_key"),
-                        text = cleanHtml(o.optString("text"))
-                    )
+                    val key = o.optString("verse_key")
+                    val translations = o.optJSONArray("translations") ?: JSONArray()
+                    var text = ""
+                    for (j in 0 until translations.length()) {
+                        val t = translations.optJSONObject(j) ?: continue
+                        if (t.optInt("resource_id", translationId) == translationId) {
+                            text = cleanHtml(t.optString("text"))
+                            break
+                        }
+                    }
+                    if (text.isBlank() && translations.length() > 0) {
+                        text = cleanHtml(translations.optJSONObject(0)?.optString("text").orEmpty())
+                    }
+                    if (key.isNotBlank() && text.isNotBlank()) {
+                        all += VerseText(verseKey = key, text = text)
+                    }
                 }
                 val pagination = json.optJSONObject("pagination")
                 val next = pagination?.optInt("next_page", -1) ?: -1
@@ -301,12 +314,26 @@ object QuranApi {
 
     private fun cleanHtml(html: String): String {
         if (html.isBlank()) return ""
-        val withBreaks = html
-            .replace(Regex("(?i)<sup[^>]*>.*?</sup>"), " ")
-            .replace(Regex("(?i)<br\\s*/?>"), "\n")
-            .replace(Regex("(?i)</p>"), "\n")
-            .replace(Regex("<[^>]+>"), " ")
-        return withBreaks
+        val plain = StringBuilder(html.length)
+        var supDepth = 0
+        Regex("(?s)<[^>]*>|[^<]+").findAll(html).forEach { match ->
+            val token = match.value
+            if (token.startsWith('<')) {
+                val lower = token.lowercase()
+                val opens = Regex("<sup\\b").findAll(lower).count()
+                val closes = Regex("</sup\\s*>").findAll(lower).count()
+                if (opens > 0) supDepth += opens
+                if (closes > 0) supDepth = (supDepth - closes).coerceAtLeast(0)
+                if (supDepth == 0 && (lower.startsWith("<br") || lower.startsWith("</p"))) {
+                    plain.append('\n')
+                } else if (supDepth == 0 && opens == 0 && closes == 0) {
+                    plain.append(' ')
+                }
+            } else if (supDepth == 0) {
+                plain.append(token)
+            }
+        }
+        return plain.toString()
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&quot;", "\"")
@@ -323,7 +350,7 @@ object QuranApi {
             connectTimeout = 15_000
             readTimeout = 30_000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "Quriva/1.4 (Android)")
+            setRequestProperty("User-Agent", "Quriva/1.5.1 (Android)")
         }
         try {
             val code = connection.responseCode
@@ -340,7 +367,4 @@ object QuranApi {
             connection.disconnect()
         }
     }
-
-    @Suppress("unused")
-    private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8")
 }

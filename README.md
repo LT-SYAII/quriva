@@ -77,7 +77,7 @@ Bangun kebiasaan baik bersama Quriva:
 - **Streak Harian** — lihat berapa hari berturut-turut kamu berinteraksi dengan Al-Qur'an.
 - **Aktivitas Baca & Dengar** — pantau jumlah ayat yang dibaca dan diputar, hari ini maupun keseluruhan.
 - **Kalender Aktivitas** — tampilan aktivitas dengan pilihan **Harian, Mingguan, dan Bulanan** untuk melihat kapan rajin dan kapan mulai jarang.
-- **Pengingat Harian** — notifikasi pengingat setiap hari agar tidak lupa menyempatkan tilawah.
+- **Pengingat Harian** — atur sendiri waktu notifikasi harian agar tidak lupa menyempatkan tilawah.
 - **Pengingat Jika Terlewat** — bila sehari terlewat, Quriva akan mengingatkan keesokan harinya, misalnya: *"Kamu belum membaca Al-Qur'an selama 1 hari"*.
 
 ---
@@ -95,7 +95,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 1.5.0
+- **Versi:** 1.5.1
 - **Pembuat:** Bang syaii
 
 ---
@@ -108,7 +108,7 @@ Untuk mendapatkan Quriva, unduh file aplikasi (APK) versi terbaru melalui halama
   👉 <a href="https://github.com/LT-SYAII/quriva/releases"><b>Buka GitHub Releases Quriva</b></a>
 </p>
 
-- **Pembaruan dalam aplikasi:** jika kamu sudah memasang Quriva, aplikasi akan memberi tahu saat versi terbaru tersedia dan menyediakan tautan unduh langsung, tanpa perlu mencari-cari di GitHub.
+- **Pembaruan dalam aplikasi:** jika kamu sudah memasang Quriva, aplikasi akan memberi tahu saat versi terbaru tersedia. APK dapat diunduh dan dibuka untuk dipasang langsung dari Quriva, tanpa perlu mencari-cari di GitHub.
 
 > **Catatan:** Saat memasang aplikasi dari luar toko aplikasi, perangkat Android mungkin meminta izin untuk menginstal dari sumber tersebut. Quriva tidak meminta akses ke kontak, lokasi, atau kamera.
 

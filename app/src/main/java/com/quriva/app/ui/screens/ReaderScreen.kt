@@ -5,6 +5,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,7 +45,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -70,8 +72,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.QuranApi
+import com.quriva.app.data.QuranRepository
 import com.quriva.app.data.RepeatMode
 import com.quriva.app.data.SurahAudioPlayer
+import com.quriva.app.data.Translations
 import com.quriva.app.data.WordItem
 import com.quriva.app.model.Ayah
 import com.quriva.app.model.SurahDetail
@@ -102,7 +106,10 @@ import java.io.FileOutputStream
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"
 
@@ -111,6 +118,7 @@ fun ReaderScreen(
     surahNumber: Int,
     initialAyah: Int,
     prefs: AppPreferences,
+    audioPlayer: SurahAudioPlayer,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -126,17 +134,14 @@ fun ReaderScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val audioPlayer = remember { SurahAudioPlayer(context) }
-    DisposableEffect(audioPlayer) {
-        audioPlayer.onAyahPlayed = { _, _ -> prefs.recordPlayActivity(1) }
-        onDispose { audioPlayer.release() }
-    }
-
     var audioSheetTarget by remember { mutableStateOf<Triple<Int, String, Int>?>(null) }
     var tafsirAyah by remember { mutableStateOf<Int?>(null) }
     var noteAyah by remember { mutableStateOf<Int?>(null) }
     var tajweedMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var wordsMap by remember { mutableStateOf<Map<String, List<WordItem>>>(emptyMap()) }
+    var translationMap by remember(surahNumber) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var translationLoading by remember(surahNumber) { mutableStateOf(false) }
+    var translationError by remember(surahNumber) { mutableStateOf<String?>(null) }
     val bookmarkKeys = remember(prefs.bookmarks) {
         prefs.bookmarks.map { "${it.surahNumber}:${it.ayahNumber}" }.toSet()
     }
@@ -146,13 +151,48 @@ fun ReaderScreen(
     LaunchedEffect(detail, prefs.showTajweed) {
         val d = detail ?: return@LaunchedEffect
         if (prefs.showTajweed && tajweedMap.isEmpty()) {
-            tajweedMap = try { QuranApi.tajweedForSurah(d.meta.number) } catch (_: Throwable) { emptyMap() }
+            tajweedMap = try {
+                QuranApi.tajweedForSurah(d.meta.number)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                emptyMap()
+            }
         }
     }
     LaunchedEffect(detail, prefs.showWordByWord, prefs.showTransliteration) {
         val d = detail ?: return@LaunchedEffect
         if ((prefs.showWordByWord || prefs.showTransliteration) && wordsMap.isEmpty()) {
-            wordsMap = try { QuranApi.wordsForSurah(d.meta.number) } catch (_: Throwable) { emptyMap() }
+            wordsMap = try {
+                QuranApi.wordsForSurah(d.meta.number)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                emptyMap()
+            }
+        }
+    }
+    LaunchedEffect(detail, prefs.translationId) {
+        val d = detail ?: return@LaunchedEffect
+        translationMap = emptyMap()
+        translationError = null
+        if (prefs.translationId == 33) {
+            translationLoading = false
+            return@LaunchedEffect
+        }
+        translationLoading = true
+        try {
+            val fetched = QuranApi.translationForSurah(prefs.translationId, d.meta.number)
+            if (fetched.isEmpty()) {
+                error("Terjemahan ini belum tersedia untuk surah tersebut.")
+            }
+            translationMap = fetched.associate { it.verseKey to it.text }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            translationError = QuranApi.friendlyNetworkError(t)
+        } finally {
+            translationLoading = false
         }
     }
 
@@ -160,17 +200,6 @@ fun ReaderScreen(
     LaunchedEffect(playingAyah, prefs.autoScrollAudio) {
         if (playingAyah > 0 && prefs.autoScrollAudio) {
             try { listState.animateScrollToItem(playingAyah) } catch (_: Throwable) {}
-        }
-    }
-
-    // Persist audio resume position periodically
-    LaunchedEffect(audioPlayer.isPlaying, audioPlayer.activeAyahNumber) {
-        while (audioPlayer.activeSurahNumber == surahNumber && audioPlayer.isPlaying) {
-            prefs.saveLastAudio(surahNumber, audioPlayer.activeAyahNumber.coerceAtLeast(1), audioPlayer.activeReciterId, audioPlayer.positionMs)
-            kotlinx.coroutines.delay(3000)
-        }
-        if (audioPlayer.activeSurahNumber == surahNumber && audioPlayer.activeAyahNumber > 0) {
-            prefs.saveLastAudio(surahNumber, audioPlayer.activeAyahNumber, audioPlayer.activeReciterId, audioPlayer.positionMs)
         }
     }
 
@@ -224,8 +253,15 @@ fun ReaderScreen(
                     onOpen = {
                         val number = audioPlayer.activeSurahNumber
                         val name = audioPlayer.activeSurahName
-                        if (number != null && name != null) {
-                            audioSheetTarget = Triple(number, name, detail?.meta?.ayahCount ?: 0)
+                        if (number in 1..114 && name != null) {
+                            val count = detail?.takeIf { it.meta.number == number }?.meta?.ayahCount
+                                ?: runCatching {
+                                    QuranRepository.getSurahs(context)
+                                        .firstOrNull { it.number == number }
+                                        ?.ayahCount
+                                }.getOrNull()
+                                ?: 0
+                            audioSheetTarget = Triple(number, name, count)
                         }
                     }
                 )
@@ -290,6 +326,11 @@ fun ReaderScreen(
                     playingAyah = playingAyah,
                     tajweedMap = tajweedMap,
                     wordsMap = wordsMap,
+                    translationId = prefs.translationId,
+                    translationName = Translations.byId(prefs.translationId).name,
+                    translationMap = translationMap,
+                    translationLoading = translationLoading,
+                    translationError = translationError,
                     onOpenAudio = {
                         audioSheetTarget = Triple(data.meta.number, data.meta.latinName, data.meta.ayahCount)
                     },
@@ -308,8 +349,37 @@ fun ReaderScreen(
                         }
                         scope.launch {
                             try {
-                                val list = QuranApi.ayahAudioList(prefs.reciterId, data.meta.number)
-                                audioPlayer.playSurah(data.meta.number, data.meta.latinName, prefs.reciterId, com.quriva.app.data.Reciters.byId(prefs.reciterId).name, list, ayah.numberInSurah, 0L)
+                                val downloaded = withContext(Dispatchers.IO) {
+                                    SurahAudioPlayer.isSurahDownloaded(
+                                        context,
+                                        data.meta.number,
+                                        prefs.reciterId,
+                                        data.meta.ayahCount
+                                    )
+                                }
+                                val list = if (downloaded) {
+                                    (1..data.meta.ayahCount).map { number ->
+                                        com.quriva.app.data.AyahAudio(
+                                            number,
+                                            "${data.meta.number}:$number",
+                                            ""
+                                        )
+                                    }
+                                } else {
+                                    QuranApi.ayahAudioList(prefs.reciterId, data.meta.number)
+                                }
+                                audioPlayer.playSurah(
+                                    data.meta.number,
+                                    data.meta.latinName,
+                                    prefs.reciterId,
+                                    com.quriva.app.data.Reciters.byId(prefs.reciterId).name,
+                                    list,
+                                    ayah.numberInSurah,
+                                    0L,
+                                    downloaded
+                                )
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (_: Throwable) {
                                 audioSheetTarget = Triple(data.meta.number, data.meta.latinName, data.meta.ayahCount)
                             }
@@ -504,6 +574,11 @@ private fun ReaderContent(
     playingAyah: Int,
     tajweedMap: Map<String, String>,
     wordsMap: Map<String, List<WordItem>>,
+    translationId: Int,
+    translationName: String,
+    translationMap: Map<String, String>,
+    translationLoading: Boolean,
+    translationError: String?,
     onOpenAudio: () -> Unit,
     onCopy: (Ayah) -> Unit,
     onShare: (Ayah) -> Unit,
@@ -519,36 +594,91 @@ private fun ReaderContent(
         state = listState
     ) {
         item(key = "header", contentType = "header") { SurahHeader(detail.meta, onOpenAudio) }
+        if (translationId != 33) {
+            item(key = "translation_status", contentType = "status") {
+                TranslationStatus(
+                    name = translationName,
+                    loading = translationLoading,
+                    error = translationError,
+                    loaded = translationMap.isNotEmpty()
+                )
+            }
+        }
         items(items = detail.ayahs, key = { it.numberInSurah }, contentType = { "ayah" }) { ayah ->
             val key = "${detail.meta.number}:${ayah.numberInSurah}"
-            AyahBlock(
-                ayah = ayah,
-                surahNumber = detail.meta.number,
-                arabicSize = prefs.arabicSize,
-                translationSize = prefs.translationSize,
-                showTranslation = prefs.showTranslation,
-                showTajweed = prefs.showTajweed,
-                showWordByWord = prefs.showWordByWord,
-                showTransliteration = prefs.showTransliteration,
-                isBookmarked = key in bookmarkKeys,
-                isPlaying = playingAyah == ayah.numberInSurah,
-                hasNote = prefs.noteFor(detail.meta.number, ayah.numberInSurah) != null,
-                tajweed = tajweedMap[key],
-                words = wordsMap[key],
-                onCopy = { onCopy(ayah) },
-                onShare = { onShare(ayah) },
-                onShareImage = { onShareImage(ayah) },
-                onTafsir = { onTafsir(ayah) },
-                onNote = { onNote(ayah) },
-                onPlayFrom = { onPlayFrom(ayah) },
-                onBookmark = { onBookmark(ayah) }
-            )
+            val selectedTranslation = translationMap[key]
+            val displayedAyah = if (selectedTranslation.isNullOrBlank()) ayah
+                else ayah.copy(translation = selectedTranslation)
+            Box(modifier = Modifier.animateItem()) {
+                AyahBlock(
+                    ayah = displayedAyah,
+                    arabicSize = prefs.arabicSize,
+                    translationSize = prefs.translationSize,
+                    showTranslation = prefs.showTranslation,
+                    showTajweed = prefs.showTajweed,
+                    showWordByWord = prefs.showWordByWord,
+                    showTransliteration = prefs.showTransliteration,
+                    isBookmarked = key in bookmarkKeys,
+                    isPlaying = playingAyah == ayah.numberInSurah,
+                    hasNote = prefs.noteFor(detail.meta.number, ayah.numberInSurah) != null,
+                    tajweed = tajweedMap[key],
+                    words = wordsMap[key],
+                    onCopy = { onCopy(displayedAyah) },
+                    onShare = { onShare(displayedAyah) },
+                    onShareImage = { onShareImage(displayedAyah) },
+                    onTafsir = { onTafsir(ayah) },
+                    onNote = { onNote(ayah) },
+                    onPlayFrom = { onPlayFrom(ayah) },
+                    onBookmark = { onBookmark(displayedAyah) }
+                )
+            }
         }
         item(key = "footer", contentType = "footer") {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("۞", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 Text("Akhir Surah ${detail.meta.latinName}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslationStatus(
+    name: String,
+    loading: Boolean,
+    error: String?,
+    loaded: Boolean
+) {
+    val colors = MaterialTheme.colorScheme
+    AnimatedVisibility(visible = loading || error != null || loaded) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = colors.surfaceVariant,
+            border = BorderStroke(1.dp, colors.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(15.dp),
+                        strokeWidth = 1.5.dp,
+                        color = colors.onBackground
+                    )
+                    Spacer(Modifier.width(9.dp))
+                }
+                Text(
+                    when {
+                        loading -> "Memuat terjemahan $name…"
+                        error != null -> "Terjemahan online gagal dimuat. Menampilkan Kemenag RI offline."
+                        else -> "Terjemahan $name · online"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
             }
         }
     }
@@ -737,7 +867,6 @@ private fun MetaChip(label: String) {
 @Composable
 private fun AyahBlock(
     ayah: Ayah,
-    surahNumber: Int,
     arabicSize: Float,
     translationSize: Float,
     showTranslation: Boolean,
@@ -758,7 +887,11 @@ private fun AyahBlock(
     onBookmark: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val bg = if (isPlaying) colors.surfaceVariant.copy(alpha = 0.55f) else Color.Transparent
+    val bg by animateColorAsState(
+        targetValue = if (isPlaying) colors.surfaceVariant.copy(alpha = 0.55f) else Color.Transparent,
+        animationSpec = tween(260),
+        label = "playingAyahBackground"
+    )
     Column(modifier = Modifier.fillMaxWidth().background(bg)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 14.dp),

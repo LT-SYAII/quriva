@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.compose.runtime.Immutable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -50,7 +51,7 @@ object UpdateRepository {
                     val a = assets.optJSONObject(i) ?: continue
                     val name = a.optString("name")
                     val dl = a.optString("browser_download_url")
-                    if (name.endsWith(".apk", ignoreCase = true) && dl.startsWith("http")) {
+                    if (name.endsWith(".apk", ignoreCase = true) && dl.startsWith("https://")) {
                         apkUrl = dl
                         apkSize = a.optLong("size", 0L)
                         break
@@ -68,6 +69,8 @@ object UpdateRepository {
                 publishedAt = json.optString("published_at")
             )
             UpdateCheckResult.Available(info)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             UpdateCheckResult.Error(friendlyError(e))
         }
@@ -83,9 +86,9 @@ object UpdateRepository {
                 @Suppress("DEPRECATION")
                 pm.getPackageInfo(pkg, 0)
             }
-            pInfo.versionName ?: "1.5.0"
+            pInfo.versionName ?: "1.5.1"
         } catch (_: Throwable) {
-            "1.5.0"
+            "1.5.1"
         }
     }
 
@@ -123,16 +126,6 @@ object UpdateRepository {
         } catch (_: Throwable) { }
     }
 
-    fun shareText(context: Context, text: String) {
-        try {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, text)
-            }
-            context.startActivity(Intent.createChooser(intent, "Bagikan").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (_: Throwable) { }
-    }
-
     private fun getJson(path: String): JSONObject {
         val connection = (URL(path).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -143,6 +136,9 @@ object UpdateRepository {
         }
         try {
             val code = connection.responseCode
+            if (code == 403 || code == 429) {
+                throw java.io.IOException("Batas pemeriksaan pembaruan tercapai. Coba lagi beberapa saat lagi.")
+            }
             if (code !in 200..299) {
                 throw java.io.IOException("Server mengembalikan kode $code.")
             }

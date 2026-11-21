@@ -1,7 +1,6 @@
 package com.quriva.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,7 +15,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -46,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.model.Bookmark
+import com.quriva.app.ui.AnimatedListItem
+import com.quriva.app.ui.interactiveClickable
 import com.quriva.app.ui.theme.ArabicFontFamily
 
 @Composable
@@ -114,18 +115,20 @@ fun BookmarksScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 10.dp, bottom = 28.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = bookmarks,
-                        key = { "${it.surahNumber}:${it.ayahNumber}" },
-                        contentType = { "bookmark" }
-                    ) { bookmark ->
-                        BookmarkRow(
-                            bookmark = bookmark,
-                            onClick = { onOpenAyah(bookmark.surahNumber, bookmark.ayahNumber) },
-                            onRemove = {
-                                prefs.removeBookmark(bookmark.surahNumber, bookmark.ayahNumber)
-                            }
-                        )
+                        key = { _, bookmark -> "${bookmark.surahNumber}:${bookmark.ayahNumber}" },
+                        contentType = { _, _ -> "bookmark" }
+                    ) { index, bookmark ->
+                        AnimatedListItem(index = index) {
+                            BookmarkRow(
+                                bookmark = bookmark,
+                                onClick = { onOpenAyah(bookmark.surahNumber, bookmark.ayahNumber) },
+                                onRemove = {
+                                    prefs.removeBookmark(bookmark.surahNumber, bookmark.ayahNumber)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -169,7 +172,7 @@ private fun BookmarkRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .interactiveClickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier

@@ -130,10 +130,17 @@ class ProgressViewModel(application: Application) : AndroidViewModel(application
             val c7 = Calendar.getInstance()
             for (i in 0 until 7) { val k = fmt.format(c7.time); weekRead += readFor(k); weekPlay += playFor(k); c7.add(Calendar.DAY_OF_YEAR, -1) }
             var monthRead = 0; var monthPlay = 0
+            var activeDays30 = 0
             val c30 = Calendar.getInstance()
-            for (i in 0 until 30) { val k = fmt.format(c30.time); monthRead += readFor(k); monthPlay += playFor(k); c30.add(Calendar.DAY_OF_YEAR, -1) }
-
-            val activeDays30 = days.count { it.readCount > 0 || it.playCount > 0 }
+            for (i in 0 until 30) {
+                val k = fmt.format(c30.time)
+                val rk = readFor(k)
+                val pk = playFor(k)
+                monthRead += rk
+                monthPlay += pk
+                if (rk > 0 || pk > 0) activeDays30++
+                c30.add(Calendar.DAY_OF_YEAR, -1)
+            }
             val best = days.maxByOrNull { it.readCount + it.playCount }
             val bestCount = (best?.readCount ?: 0) + (best?.playCount ?: 0)
             val bestLabel = if (best != null && bestCount > 0) {

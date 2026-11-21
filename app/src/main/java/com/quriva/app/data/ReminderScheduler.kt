@@ -28,16 +28,14 @@ object ReminderScheduler {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
+        // One-shot alarm; ReminderReceiver schedules the next day after showing
+        // the notification. This survives Doze more reliably than a repeating
+        // inexact alarm and avoids drift across reboots/timezone changes.
         try {
-            alarm.setInexactRepeating(
-                AlarmManager.RTC_WAKEUP,
-                cal.timeInMillis,
-                AlarmManager.INTERVAL_DAY,
-                pi
-            )
+            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
         } catch (_: Throwable) {
             try {
-                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
+                alarm.set(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
             } catch (_: Throwable) { }
         }
     }

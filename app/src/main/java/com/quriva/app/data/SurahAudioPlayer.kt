@@ -21,10 +21,6 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -36,7 +32,6 @@ class SurahAudioPlayer(context: Context) {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val controllerFuture: ListenableFuture<MediaController> =
         MediaController.Builder(
@@ -49,7 +44,6 @@ class SurahAudioPlayer(context: Context) {
 
     private var controller: MediaController? = null
     private var pendingAction: ((MediaController) -> Unit)? = null
-    private var autoAdvanceInProgress = false
 
     var onAyahPlayed: ((surah: Int, ayah: Int) -> Unit)? = null
 
@@ -116,9 +110,6 @@ class SurahAudioPlayer(context: Context) {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             syncState()
-            if (playbackState == Player.STATE_ENDED) {
-                handleEnded()
-            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -161,13 +152,21 @@ class SurahAudioPlayer(context: Context) {
         reciterName: String,
         ayahs: List<AyahAudio>,
         startAyah: Int = 1,
-        startPositionMs: Long = 0L
+        startPositionMs: Long = 0L,
+        useVerifiedDownload: Boolean = false
     ) {
         if (ayahs.isEmpty()) return
         val action: (MediaController) -> Unit = { c ->
             errorMessage = null
             val items = ayahs.map { a ->
-                buildAyahItem(surahNumber, surahName, reciterId, reciterName, a)
+                buildAyahItem(
+                    surahNumber,
+                    surahName,
+                    reciterId,
+                    reciterName,
+                    a,
+                    useVerifiedDownload
+                )
             }
             val startIndex = (ayahs.indexOfFirst { it.ayahNumber == startAyah }).coerceAtLeast(0)
             c.setMediaItems(items, startIndex, startPositionMs.coerceAtLeast(0L))
@@ -280,34 +279,6 @@ class SurahAudioPlayer(context: Context) {
         durationMs = c.duration.coerceAtLeast(0L)
     }
 
-    private fun handleEnded() {
-        val surah = activeSurahNumber
-        val reciter = activeReciterId
-        if (repeatMode != RepeatMode.OFF) return
-        if (surah !in 1..113 || reciter <= 0) return
-        if (autoAdvanceInProgress) return
-        autoAdvanceInProgress = true
-        scope.launch {
-            try {
-                val nextSurah = surah + 1
-                val meta = QuranRepository.getSurahs(appContext).firstOrNull { it.number == nextSurah }
-                val reciterName = Reciters.byId(reciter).name
-                if (meta != null) {
-                    val list = try { QuranApi.ayahAudioList(reciter, nextSurah) } catch (_: Throwable) { emptyList() }
-                    if (list.isNotEmpty()) {
-                        playSurah(nextSurah, meta.latinName, reciter, reciterName, list, 1, 0L)
-                    } else {
-                        val url = QuranApi.chapterAudioUrl(reciter, nextSurah)
-                        playChapterUrl(nextSurah, meta.latinName, reciter, reciterName, url)
-                    }
-                }
-            } catch (_: Throwable) {
-            } finally {
-                autoAdvanceInProgress = false
-            }
-        }
-    }
-
     fun release() {
         mainHandler.removeCallbacks(sleepTicker)
         controller?.removeListener(listener)
@@ -341,6 +312,12 @@ class SurahAudioPlayer(context: Context) {
         durationMs = c.duration.coerceAtLeast(0L)
         positionMs = c.currentPosition.coerceAtLeast(0L)
         playlistSize = c.mediaItemCount
+        repeatMode = when (c.repeatMode) {
+            Player.REPEAT_MODE_ONE -> RepeatMode.AYAH
+            Player.REPEAT_MODE_ALL -> RepeatMode.SURAH
+            else -> RepeatMode.OFF
+        }
+        playbackSpeed = c.playbackParameters.speed
 
         val item = c.currentMediaItem
         currentTitle = item?.mediaMetadata?.title?.toString()
@@ -356,7 +333,8 @@ class SurahAudioPlayer(context: Context) {
         surahName: String,
         reciterId: Int,
         reciterName: String,
-        audio: AyahAudio
+        audio: AyahAudio,
+        useVerifiedDownload: Boolean
     ): MediaItem {
         val extras = Bundle().apply {
             putInt(EXTRA_SURAH, surahNumber)
@@ -366,7 +344,7 @@ class SurahAudioPlayer(context: Context) {
             putString(EXTRA_VERSE_KEY, audio.verseKey)
         }
         val local = File(audioDir(appContext), "${reciterId}_${surahNumber}_${audio.ayahNumber}.mp3")
-        val uri = if (local.exists() && local.length() > 1024) {
+        val uri = if (useVerifiedDownload && local.exists() && local.length() > 1024) {
             Uri.fromFile(local)
         } else {
             Uri.parse(audio.url)
@@ -395,12 +373,17 @@ class SurahAudioPlayer(context: Context) {
         fun audioDir(context: Context): File =
             File(context.filesDir, "audio").apply { mkdirs() }
 
-        fun localAudioFile(context: Context, surah: Int, reciter: Int, ayah: Int): File =
-            File(audioDir(context), "${reciter}_${surah}_${ayah}.mp3")
+        fun downloadMarker(context: Context, surah: Int, reciter: Int): File =
+            File(audioDir(context), "${reciter}_${surah}.complete")
 
         fun isSurahDownloaded(context: Context, surah: Int, reciter: Int, ayahCount: Int): Boolean {
             if (ayahCount <= 0) return false
             val dir = audioDir(context)
+            val marker = downloadMarker(context, surah, reciter)
+            val markedAyahCount = runCatching {
+                marker.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull()
+            }.getOrNull()
+            if (markedAyahCount != ayahCount) return false
             var count = 0
             for (a in 1..ayahCount) {
                 val f = File(dir, "${reciter}_${surah}_${a}.mp3")
@@ -409,18 +392,15 @@ class SurahAudioPlayer(context: Context) {
             return count >= ayahCount
         }
 
-        fun downloadedAyahCount(context: Context, surah: Int, reciter: Int): Int {
-            val dir = audioDir(context)
-            return dir.listFiles { _, name ->
-                name.startsWith("${reciter}_${surah}_") && name.endsWith(".mp3")
-            }?.count { it.length() > 1024 } ?: 0
-        }
-
         fun deleteSurahDownload(context: Context, surah: Int, reciter: Int) {
             val dir = audioDir(context)
             dir.listFiles { _, name ->
-                name.startsWith("${reciter}_${surah}_") && name.endsWith(".mp3")
+                name.startsWith("${reciter}_${surah}_") &&
+                    (name.endsWith(".mp3") || name.endsWith(".part"))
             }?.forEach { it.delete() }
+            val marker = downloadMarker(context, surah, reciter)
+            marker.delete()
+            File(marker.absolutePath + ".part").delete()
         }
     }
 }

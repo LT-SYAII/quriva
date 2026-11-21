@@ -13,12 +13,16 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavType
@@ -27,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.quriva.app.data.AppPreferences
+import com.quriva.app.data.SurahAudioPlayer
 import com.quriva.app.ui.screens.BookmarksScreen
 import com.quriva.app.ui.screens.HomeScreen
 import com.quriva.app.ui.screens.JuzScreen
@@ -40,6 +45,44 @@ import com.quriva.app.ui.theme.QurivaTheme
 
 @Composable
 fun QurivaApp(prefs: AppPreferences) {
+    val context = LocalContext.current
+    val audioPlayer = remember { SurahAudioPlayer(context) }
+    DisposableEffect(audioPlayer, prefs) {
+        audioPlayer.onAyahPlayed = { _, _ -> prefs.recordPlayActivity(1) }
+        onDispose {
+            audioPlayer.onAyahPlayed = null
+            audioPlayer.release()
+        }
+    }
+    LaunchedEffect(
+        audioPlayer.isPlaying,
+        audioPlayer.activeSurahNumber,
+        audioPlayer.activeAyahNumber,
+        audioPlayer.activeReciterId
+    ) {
+        while (audioPlayer.isPlaying &&
+            audioPlayer.activeSurahNumber in 1..114 &&
+            audioPlayer.activeReciterId > 0
+        ) {
+            audioPlayer.syncPosition()
+            prefs.saveLastAudio(
+                audioPlayer.activeSurahNumber,
+                audioPlayer.activeAyahNumber.coerceAtLeast(1),
+                audioPlayer.activeReciterId,
+                audioPlayer.positionMs
+            )
+            kotlinx.coroutines.delay(3_000)
+        }
+        if (audioPlayer.activeSurahNumber in 1..114 && audioPlayer.activeReciterId > 0) {
+            audioPlayer.syncPosition()
+            prefs.saveLastAudio(
+                audioPlayer.activeSurahNumber,
+                audioPlayer.activeAyahNumber.coerceAtLeast(1),
+                audioPlayer.activeReciterId,
+                audioPlayer.positionMs
+            )
+        }
+    }
     val darkTheme = when (prefs.themeMode) {
         "light" -> false
         "dark" -> true
@@ -165,6 +208,7 @@ fun QurivaApp(prefs: AppPreferences) {
                         surahNumber = number,
                         initialAyah = ayah,
                         prefs = prefs,
+                        audioPlayer = audioPlayer,
                         onBack = { navController.popBackStack() },
                         onOpenSettings = { showSettings = true }
                     )

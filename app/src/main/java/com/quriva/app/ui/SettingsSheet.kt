@@ -1,6 +1,7 @@
 package com.quriva.app.ui
 
 import android.Manifest
+import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +64,7 @@ import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.ReminderScheduler
+import com.quriva.app.data.Translations
 import com.quriva.app.data.UpdateCheckResult
 import com.quriva.app.data.UpdateRepository
 import com.quriva.app.ui.theme.ArabicFontFamily
@@ -118,6 +122,21 @@ fun SettingsSheet(
                 ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
             }
         }
+    }
+
+    fun pickReminderTime() {
+        TimePickerDialog(
+            context,
+            { _, hour, minute ->
+                prefs.updateReminder(prefs.reminderEnabled, hour, minute)
+                if (prefs.reminderEnabled) {
+                    ReminderScheduler.schedule(context, hour, minute)
+                }
+            },
+            prefs.reminderHour,
+            prefs.reminderMinute,
+            true
+        ).show()
     }
 
     fun checkUpdateNow() {
@@ -198,6 +217,28 @@ fun SettingsSheet(
             Slider(value = prefs.translationSize, onValueChange = { prefs.updateTranslationSize(it) }, valueRange = 12f..24f, colors = sliderColors())
 
             Spacer(Modifier.height(20.dp))
+            Text("Terjemahan", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Translations.all.forEach { option ->
+                    FilterChip(
+                        selected = prefs.translationId == option.id,
+                        onClick = { prefs.updateTranslation(option.id) },
+                        label = { Text(option.name) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (prefs.translationId == 33) "Terjemahan Kemenag RI tersedia offline."
+                else "Terjemahan tambahan diambil online saat membaca. Kemenag RI tetap menjadi cadangan offline.",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
             SettingToggle("Tampilkan terjemahan", "Sembunyikan untuk mode fokus teks Arab", prefs.showTranslation) { prefs.updateShowTranslation(it) }
             Spacer(Modifier.height(10.dp))
             SettingToggle("Tajwid berwarna", "Warna hukum tajwid pada teks Arab", prefs.showTajweed) { prefs.updateShowTajweed(it) }
@@ -219,10 +260,41 @@ fun SettingsSheet(
                 else "Kirim pengingat harian untuk membaca Al-Qur'an",
                 prefs.reminderEnabled
             ) { toggleReminder() }
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                onClick = { pickReminderTime() },
+                shape = RoundedCornerShape(14.dp),
+                color = colors.surfaceVariant,
+                border = BorderStroke(1.dp, colors.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_schedule),
+                        contentDescription = null,
+                        tint = colors.onBackground,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Waktu pengingat", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+                        Text("Ketuk untuk mengubah jam", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    }
+                    Text(
+                        "%02d:%02d".format(prefs.reminderHour, prefs.reminderMinute),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onBackground
+                    )
+                }
+            }
             if (prefs.reminderEnabled) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Izin notifikasi diperlukan agar pengingat dapat ditampilkan.",
+                    "Izin notifikasi dan pengingat setelah perangkat dinyalakan ulang sudah diatur otomatis.",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
                 )
@@ -280,7 +352,7 @@ fun SettingsSheet(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Pembaruan akan diperiksa otomatis saat aplikasi dibuka, dan kamu juga bisa mengunduh APK terbaru langsung dari sini tanpa perlu membuka GitHub.",
+                        "Pembaruan diperiksa otomatis saat aplikasi dibuka. APK terbaru dapat diunduh dan dipasang langsung dari aplikasi, tanpa perlu membuka GitHub.",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant.copy(alpha = 0.8f)
                     )
@@ -308,10 +380,6 @@ fun SettingsSheet(
             onSkipVersion = {
                 prefs.dismissUpdateTag(update.tagName)
                 foundUpdate = null
-            },
-            onDownload = {
-                val url = update.apkDownloadUrl ?: update.htmlUrl
-                UpdateRepository.openUrl(context, url)
             },
             onOpenRelease = {
                 UpdateRepository.openUrl(context, update.htmlUrl)

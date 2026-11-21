@@ -1,7 +1,6 @@
 package com.quriva.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,7 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.quriva.app.R
+import com.quriva.app.ui.AnimatedListItem
 
 @Composable
 fun PagesScreen(
@@ -61,16 +61,19 @@ fun PagesScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(pages, key = { it }) { page ->
-                    Surface(
-                        onClick = { onOpenPage(page) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = colors.surfaceVariant,
-                        border = BorderStroke(1.dp, colors.outlineVariant)
-                    ) {
-                        Column(modifier = Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("$page", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, textAlign = TextAlign.Center)
-                            Text("Hal.", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                itemsIndexed(pages, key = { _, page -> page }) { index, page ->
+                    AnimatedListItem(index = index) {
+                        Surface(
+                            onClick = { onOpenPage(page) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = colors.surfaceVariant,
+                            border = BorderStroke(1.dp, colors.outlineVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("$page", style = MaterialTheme.typography.titleMedium, color = colors.onBackground, textAlign = TextAlign.Center)
+                                Text("Hal.", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                            }
                         }
                     }
                 }

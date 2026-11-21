@@ -2,7 +2,6 @@ package com.quriva.app.ui.screens
 
 import android.app.Application
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +17,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -58,8 +57,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.quriva.app.R
 import com.quriva.app.model.SearchResult
+import com.quriva.app.ui.AnimatedListItem
 import com.quriva.app.ui.SearchViewModel
 import com.quriva.app.ui.SearchViewModelFactory
+import com.quriva.app.ui.interactiveClickable
 import com.quriva.app.ui.theme.ArabicFontFamily
 
 @Composable
@@ -235,16 +236,18 @@ fun SearchScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 28.dp)
                     ) {
-                        items(
+                        itemsIndexed(
                             items = viewModel.results,
-                            key = { "${it.surahNumber}:${it.ayahNumber}" },
-                            contentType = { "search_result" }
-                        ) { result ->
-                            SearchResultRow(
-                                result = result,
-                                query = viewModel.query.trim(),
-                                onClick = { onOpenAyah(result.surahNumber, result.ayahNumber) }
-                            )
+                            key = { _, result -> "${result.surahNumber}:${result.ayahNumber}" },
+                            contentType = { _, _ -> "search_result" }
+                        ) { index, result ->
+                            AnimatedListItem(index = index) {
+                                SearchResultRow(
+                                    result = result,
+                                    query = viewModel.query.trim(),
+                                    onClick = { onOpenAyah(result.surahNumber, result.ayahNumber) }
+                                )
+                            }
                         }
                         if (viewModel.totalResults > viewModel.results.size) {
                             item {
@@ -276,7 +279,7 @@ private fun SearchResultRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .interactiveClickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier

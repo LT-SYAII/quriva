@@ -1,8 +1,12 @@
 package com.quriva.app.ui
 
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -46,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -60,12 +66,18 @@ import com.quriva.app.data.Reciters
 import com.quriva.app.data.RepeatMode
 import com.quriva.app.data.SurahAudioPlayer
 import com.quriva.app.data.formatDuration
+import com.quriva.app.ui.AnimatedListItem
+import com.quriva.app.ui.interactiveClickable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -113,18 +125,36 @@ fun AudioSheet(
             loading = true
             errorMessage = null
             try {
-                val list = QuranApi.ayahAudioList(reciter.id, surahNumber)
+                val list = if (isDownloaded) {
+                    (1..ayahCount).map { ayah ->
+                        AyahAudio(ayah, "$surahNumber:$ayah", "")
+                    }
+                } else {
+                    QuranApi.ayahAudioList(reciter.id, surahNumber)
+                }
                 if (list.isEmpty()) {
                     // fallback to chapter audio
                     val url = QuranApi.chapterAudioUrl(reciter.id, surahNumber)
                     player.playChapterUrl(surahNumber, surahName, reciter.id, reciter.name, url)
                 } else {
-                    player.playSurah(surahNumber, surahName, reciter.id, reciter.name, list, fromAyah, positionMs)
+                    player.playSurah(
+                        surahNumber,
+                        surahName,
+                        reciter.id,
+                        reciter.name,
+                        list,
+                        fromAyah,
+                        positionMs,
+                        isDownloaded
+                    )
                 }
                 player.setRepeat(RepeatMode.valueOf(prefs.repeatMode.ifBlank { "OFF" }))
                 player.setSpeed(prefs.playbackSpeed)
+                player.setSleepTimer(prefs.sleepTimerMinutes)
                 prefs.updateReciter(reciter.id)
                 prefs.saveLastAudio(surahNumber, fromAyah, reciter.id, 0L)
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
                 errorMessage = QuranApi.friendlyNetworkError(t)
             } finally {
@@ -172,7 +202,7 @@ fun AudioSheet(
                 Spacer(Modifier.height(14.dp))
 
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().animateContentSize(),
                     shape = RoundedCornerShape(24.dp),
                     color = colors.surfaceVariant,
                     border = BorderStroke(1.dp, colors.outlineVariant)
@@ -209,7 +239,12 @@ fun AudioSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(onClick = { if (isActive) player.previous() }, enabled = isActive && player.activeAyahNumber > 1) {
-                                Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = "Sebelumnya", tint = colors.onBackground, modifier = Modifier.size(20.dp))
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_arrow_forward),
+                                    contentDescription = "Sebelumnya",
+                                    tint = colors.onBackground,
+                                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = 180f }
+                                )
                             }
                             Spacer(Modifier.width(8.dp))
                             Button(
@@ -236,9 +271,11 @@ fun AudioSheet(
                         }
 
                         val shownError = errorMessage ?: if (isActive) player.errorMessage else null
-                        if (shownError != null) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(shownError, style = MaterialTheme.typography.labelSmall, color = colors.onBackground)
+                        AnimatedVisibility(visible = shownError != null) {
+                            Column {
+                                Spacer(Modifier.height(8.dp))
+                                Text(shownError.orEmpty(), style = MaterialTheme.typography.labelSmall, color = colors.onBackground)
+                            }
                         }
                     }
                 }
@@ -294,9 +331,29 @@ fun AudioSheet(
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                if (downloading && downloadProgress != null) {
-                    Text("Mengunduh ${downloadProgress!!.first}/${downloadProgress!!.second} ayat...", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
+                AnimatedVisibility(visible = downloading && downloadProgress != null) {
+                    val progress = downloadProgress
+                    if (progress != null) {
+                        Column {
+                            Text(
+                                "Mengunduh ${progress.first}/${progress.second} ayat...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = {
+                                    if (progress.second > 0) {
+                                        progress.first.toFloat() / progress.second.toFloat()
+                                    } else 0f
+                                },
+                                modifier = Modifier.fillMaxWidth().height(3.dp),
+                                color = colors.onBackground,
+                                trackColor = colors.outlineVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
@@ -309,6 +366,8 @@ fun AudioSheet(
                                         downloadProgress = d to t
                                     }
                                     isDownloaded = SurahAudioPlayer.isSurahDownloaded(context, surahNumber, selectedId, ayahCount)
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (t: Throwable) {
                                     errorMessage = QuranApi.friendlyNetworkError(t)
                                 } finally {
@@ -340,16 +399,18 @@ fun AudioSheet(
                 Spacer(Modifier.height(6.dp))
             }
 
-            items(Reciters.all, key = { it.id }, contentType = { "reciter" }) { reciter ->
-                ReciterRow(
-                    reciter = reciter,
-                    selected = reciter.id == selectedId,
-                    onClick = {
-                        selectedId = reciter.id
-                        prefs.updateReciter(reciter.id)
-                        errorMessage = null
-                    }
-                )
+            itemsIndexed(Reciters.all, key = { _, reciter -> reciter.id }, contentType = { _, _ -> "reciter" }) { index, reciter ->
+                AnimatedListItem(index = index) {
+                    ReciterRow(
+                        reciter = reciter,
+                        selected = reciter.id == selectedId,
+                        onClick = {
+                            selectedId = reciter.id
+                            prefs.updateReciter(reciter.id)
+                            errorMessage = null
+                        }
+                    )
+                }
             }
 
             item {
@@ -407,11 +468,17 @@ private fun AudioProgress(player: SurahAudioPlayer, isActive: Boolean) {
 @Composable
 private fun ReciterRow(reciter: Reciter, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val background by animateColorAsState(
+        targetValue = if (selected) colors.surfaceVariant else Color.Transparent,
+        animationSpec = tween(220),
+        label = "reciterBackground"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 9.dp),
+            .interactiveClickable(onClick = onClick)
+            .background(background, RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -436,28 +503,66 @@ private suspend fun downloadSurahAudio(
     onProgress: (Int, Int) -> Unit
 ) {
     val list = QuranApi.ayahAudioList(reciter, surah)
-    val items = if (list.isNotEmpty()) list else (1..ayahCount).map { AyahAudio(it, "$surah:$it", "") }
+    val byAyah = list.associateBy { it.ayahNumber }
+    val items = (1..ayahCount).map { ayah ->
+        byAyah[ayah] ?: throw IOException("Audio ayat $surah:$ayah belum tersedia.")
+    }
     val dir = SurahAudioPlayer.audioDir(context)
     withContext(Dispatchers.IO) {
-        items.forEachIndexed { idx, a ->
-            onProgress(idx + 1, items.size)
-            val out = File(dir, "${reciter}_${surah}_${a.ayahNumber}.mp3")
-            if (out.exists() && out.length() > 1024) return@forEachIndexed
-            if (a.url.isBlank()) return@forEachIndexed
-            val conn = (URL(a.url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15000
-                readTimeout = 30000
-                setRequestProperty("User-Agent", "Quriva/1.4 (Android)")
-            }
-            try {
-                if (conn.responseCode in 200..299) {
-                    conn.inputStream.use { input ->
-                        FileOutputStream(out).use { output -> input.copyTo(output) }
-                    }
+        SurahAudioPlayer.deleteSurahDownload(context, surah, reciter)
+        val marker = SurahAudioPlayer.downloadMarker(context, surah, reciter)
+        val markerTemp = File(marker.absolutePath + ".part")
+        try {
+            withContext(Dispatchers.Main.immediate) { onProgress(0, items.size) }
+            items.forEachIndexed { idx, a ->
+                val out = File(dir, "${reciter}_${surah}_${a.ayahNumber}.mp3")
+                val temp = File(out.absolutePath + ".part")
+                temp.delete()
+                val conn = (URL(a.url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15_000
+                    readTimeout = 45_000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Quriva/1.5.1 (Android)")
                 }
-            } finally {
-                conn.disconnect()
+                try {
+                    val code = conn.responseCode
+                    if (code !in 200..299) {
+                        throw IOException("Server audio mengembalikan kode $code.")
+                    }
+                    conn.inputStream.use { input ->
+                        FileOutputStream(temp).use { output ->
+                            val buffer = ByteArray(16 * 1024)
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                output.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                    val expected = conn.contentLengthLong
+                    if (temp.length() <= 1024L || (expected > 0L && temp.length() != expected)) {
+                        throw IOException("Berkas audio ayat ${a.verseKey} tidak lengkap.")
+                    }
+                    if (!temp.renameTo(out)) {
+                        throw IOException("Audio tidak dapat disimpan dengan aman.")
+                    }
+                } finally {
+                    conn.disconnect()
+                    temp.delete()
+                }
+                withContext(Dispatchers.Main.immediate) { onProgress(idx + 1, items.size) }
             }
+            markerTemp.writeText(ayahCount.toString())
+            if (!markerTemp.renameTo(marker)) {
+                throw IOException("Status unduhan tidak dapat disimpan.")
+            }
+        } catch (t: Throwable) {
+            SurahAudioPlayer.deleteSurahDownload(context, surah, reciter)
+            throw t
+        } finally {
+            markerTemp.delete()
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.quriva.app.ui.screens
 
 import android.app.Application
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -12,7 +11,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -186,12 +184,7 @@ fun HomeScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        AnimatedContent(
-            targetState = state,
-            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
-            label = "homeState"
-        ) { uiState ->
-            LazyColumn(
+        LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing),
@@ -206,7 +199,7 @@ fun HomeScreen(
                     )
                 }
 
-                when (uiState) {
+                when (val uiState = state) {
                     is HomeUiState.Loading -> {
                         item(key = "search_skeleton") { SearchSkeleton() }
                         items(count = 8, key = { "sk_$it" }) { SkeletonSurahRow() }
@@ -281,7 +274,6 @@ fun HomeScreen(
                         }
                     }
                 }
-            }
         }
     }
 
@@ -294,10 +286,6 @@ fun HomeScreen(
             onSkipVersion = {
                 prefs.dismissUpdateTag(update.tagName)
                 pendingUpdate = null
-            },
-            onDownload = {
-                val url = update.apkDownloadUrl ?: update.htmlUrl
-                UpdateRepository.openUrl(context, url)
             },
             onOpenRelease = {
                 UpdateRepository.openUrl(context, update.htmlUrl)
@@ -552,23 +540,28 @@ private fun ExploreSection(
             Text("Jelajahi", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
         }
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_search, onClick = onOpenSearch, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_layers, onClick = onOpenJuz, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_bookmark, onClick = onOpenBookmarks, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_book_open, onClick = onOpenAyahOfDay, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_search, description = "Cari ayat", onClick = onOpenSearch, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_layers, description = "Daftar juz", onClick = onOpenJuz, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_bookmark, description = "Bookmark", onClick = onOpenBookmarks, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Ayat hari ini", onClick = onOpenAyahOfDay, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_book_open, onClick = onOpenProgress, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_copy, onClick = onOpenNotes, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_layers, onClick = onOpenPages, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Daily Streak", onClick = onOpenProgress, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_copy, description = "Catatan pribadi", onClick = onOpenNotes, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_layers, description = "Halaman mushaf", onClick = onOpenPages, modifier = Modifier.weight(1f))
             Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun IconOnlyTile(icon: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun IconOnlyTile(
+    icon: Int,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -583,7 +576,7 @@ private fun IconOnlyTile(icon: Int, onClick: () -> Unit, modifier: Modifier = Mo
         border = BorderStroke(1.dp, colors.outlineVariant)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Icon(painter = painterResource(icon), contentDescription = null, tint = colors.onBackground, modifier = Modifier.size(22.dp))
+            Icon(painter = painterResource(icon), contentDescription = description, tint = colors.onBackground, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -639,7 +632,11 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(stiffness = Spring.StiffnessMedium), label = "pill")
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "pill"
+    )
     Surface(
         onClick = onClick,
         interactionSource = interaction,
