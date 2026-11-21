@@ -8,6 +8,8 @@ import android.os.Build
 import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -33,47 +35,63 @@ sealed interface UpdateCheckResult {
 
 object UpdateRepository {
     private const val LATEST_API = "https://api.github.com/repos/LT-SYAII/quriva/releases/latest"
+    private const val MEMORY_CACHE_MS = 60_000L
+    private val checkMutex = Mutex()
+    private var cachedAt = 0L
+    private var cachedResult: UpdateCheckResult? = null
 
-    suspend fun checkForUpdate(context: Context): UpdateCheckResult = withContext(Dispatchers.IO) {
-        try {
-            val json = getJson(LATEST_API)
-            val tag = json.optString("tag_name").trim()
-            val latestVersion = normalizeVersion(tag.ifBlank { json.optString("name") })
-            val currentVersion = normalizeVersion(currentVersionName(context))
-            if (latestVersion.isBlank() || !isNewer(latestVersion, currentVersion)) {
-                return@withContext UpdateCheckResult.UpToDate
-            }
-            val assets = json.optJSONArray("assets")
-            var apkUrl: String? = null
-            var apkSize = 0L
-            if (assets != null) {
-                for (i in 0 until assets.length()) {
-                    val a = assets.optJSONObject(i) ?: continue
-                    val name = a.optString("name")
-                    val dl = a.optString("browser_download_url")
-                    if (name.endsWith(".apk", ignoreCase = true) && dl.startsWith("https://")) {
-                        apkUrl = dl
-                        apkSize = a.optLong("size", 0L)
-                        break
+    suspend fun checkForUpdate(
+        context: Context,
+        force: Boolean = false
+    ): UpdateCheckResult = checkMutex.withLock {
+        val now = System.currentTimeMillis()
+        cachedResult?.takeIf { !force && now - cachedAt < MEMORY_CACHE_MS }?.let {
+            return@withLock it
+        }
+        val result = withContext(Dispatchers.IO) {
+            try {
+                val json = getJson(LATEST_API)
+                val tag = json.optString("tag_name").trim()
+                val latestVersion = normalizeVersion(tag.ifBlank { json.optString("name") })
+                val currentVersion = normalizeVersion(currentVersionName(context))
+                if (latestVersion.isBlank() || !isNewer(latestVersion, currentVersion)) {
+                    return@withContext UpdateCheckResult.UpToDate
+                }
+                val assets = json.optJSONArray("assets")
+                var apkUrl: String? = null
+                var apkSize = 0L
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val a = assets.optJSONObject(i) ?: continue
+                        val name = a.optString("name")
+                        val dl = a.optString("browser_download_url")
+                        if (name.endsWith(".apk", ignoreCase = true) && dl.startsWith("https://")) {
+                            apkUrl = dl
+                            apkSize = a.optLong("size", 0L)
+                            break
+                        }
                     }
                 }
+                val info = AppUpdateInfo(
+                    tagName = tag.ifBlank { "v$latestVersion" },
+                    versionName = latestVersion,
+                    name = json.optString("name").ifBlank { "Quriva $latestVersion" },
+                    body = json.optString("body"),
+                    htmlUrl = json.optString("html_url").ifBlank { "https://github.com/LT-SYAII/quriva/releases/latest" },
+                    apkDownloadUrl = apkUrl,
+                    apkSize = apkSize,
+                    publishedAt = json.optString("published_at")
+                )
+                UpdateCheckResult.Available(info)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                UpdateCheckResult.Error(friendlyError(e))
             }
-            val info = AppUpdateInfo(
-                tagName = tag.ifBlank { "v$latestVersion" },
-                versionName = latestVersion,
-                name = json.optString("name").ifBlank { "Quriva $latestVersion" },
-                body = json.optString("body"),
-                htmlUrl = json.optString("html_url").ifBlank { "https://github.com/LT-SYAII/quriva/releases/latest" },
-                apkDownloadUrl = apkUrl,
-                apkSize = apkSize,
-                publishedAt = json.optString("published_at")
-            )
-            UpdateCheckResult.Available(info)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            UpdateCheckResult.Error(friendlyError(e))
         }
+        cachedAt = now
+        cachedResult = result
+        result
     }
 
     fun currentVersionName(context: Context): String {
@@ -86,9 +104,9 @@ object UpdateRepository {
                 @Suppress("DEPRECATION")
                 pm.getPackageInfo(pkg, 0)
             }
-            pInfo.versionName ?: "1.5.1"
+            pInfo.versionName ?: "1.5.2"
         } catch (_: Throwable) {
-            "1.5.1"
+            "1.5.2"
         }
     }
 

@@ -350,7 +350,7 @@ object QuranApi {
             connectTimeout = 15_000
             readTimeout = 30_000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "Quriva/1.5.1 (Android)")
+            setRequestProperty("User-Agent", "Quriva/1.5.2 (Android)")
         }
         try {
             val code = connection.responseCode

@@ -75,9 +75,9 @@
 Bangun kebiasaan baik bersama Quriva:
 
 - **Streak Harian** — lihat berapa hari berturut-turut kamu berinteraksi dengan Al-Qur'an.
-- **Aktivitas Baca & Dengar** — pantau jumlah ayat yang dibaca dan diputar, hari ini maupun keseluruhan.
+- **Aktivitas Baca & Dengar Realtime** — ayat yang terlihat saat membaca dan ayat yang diputar langsung memperbarui statistik hari ini.
 - **Kalender Aktivitas** — tampilan aktivitas dengan pilihan **Harian, Mingguan, dan Bulanan** untuk melihat kapan rajin dan kapan mulai jarang.
-- **Pengingat Harian** — atur sendiri waktu notifikasi harian agar tidak lupa menyempatkan tilawah.
+- **Pengingat Harian** — atur sendiri waktu notifikasi, periksa status izin/channel, dan kirim notifikasi uji langsung dari pengaturan.
 - **Pengingat Jika Terlewat** — bila sehari terlewat, Quriva akan mengingatkan keesokan harinya, misalnya: *"Kamu belum membaca Al-Qur'an selama 1 hari"*.
 
 ---
@@ -95,7 +95,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 1.5.1
+- **Versi:** 1.5.2
 - **Pembuat:** Bang syaii
 
 ---

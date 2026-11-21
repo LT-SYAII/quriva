@@ -95,6 +95,11 @@ class AppPreferences(context: Context) {
     var reminderMinute by mutableIntStateOf(prefs.getInt(KEY_REMINDER_MINUTE, 0))
         private set
 
+    var notificationPermissionAsked by mutableStateOf(
+        prefs.getBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, false)
+    )
+        private set
+
     var lastAudioSurah by mutableIntStateOf(prefs.getInt(KEY_LAST_AUDIO_SURAH, 0))
         private set
     var lastAudioAyah by mutableIntStateOf(prefs.getInt(KEY_LAST_AUDIO_AYAH, 0))
@@ -112,6 +117,8 @@ class AppPreferences(context: Context) {
     var lastUpdateCheckMs by mutableLongStateOf(prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L))
         private set
     var dismissedUpdateTag by mutableStateOf(prefs.getString(KEY_DISMISSED_UPDATE, "") ?: "")
+        private set
+    var updateNotifiedTag by mutableStateOf(prefs.getString(KEY_UPDATE_NOTIFIED, "") ?: "")
         private set
 
     fun updateThemeMode(mode: String) {
@@ -205,7 +212,18 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
-    fun saveLastRead(surahNumber: Int, surahName: String, ayah: Int, total: Int) {
+    fun markNotificationPermissionAsked() {
+        notificationPermissionAsked = true
+        prefs.edit().putBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, true).apply()
+    }
+
+    fun saveLastRead(
+        surahNumber: Int,
+        surahName: String,
+        ayah: Int,
+        total: Int,
+        visibleAyahs: Collection<Int> = listOf(ayah)
+    ) {
         if (ayah <= 0 || total <= 0) return
         lastRead = LastRead(surahNumber, surahName, ayah, total)
         prefs.edit()
@@ -214,7 +232,7 @@ class AppPreferences(context: Context) {
             .putInt(KEY_LAST_AYAH, ayah)
             .putInt(KEY_LAST_TOTAL, total)
             .apply()
-        recordReadingProgress(surahNumber, ayah)
+        recordReadingProgress(surahNumber, visibleAyahs)
     }
 
     fun saveLastAudio(surah: Int, ayah: Int, reciter: Int, positionMs: Long) {
@@ -329,18 +347,26 @@ class AppPreferences(context: Context) {
         persistNotes()
     }
 
-    fun recordReadingProgress(surahNumber: Int, ayahNumber: Int) {
+    fun recordReadingProgress(surahNumber: Int, ayahNumber: Int) =
+        recordReadingProgress(surahNumber, listOf(ayahNumber))
+
+    fun recordReadingProgress(surahNumber: Int, ayahNumbers: Collection<Int>) {
+        val validAyahs = ayahNumbers.asSequence().filter { it > 0 }.distinct().toList()
+        if (validAyahs.isEmpty()) return
         val today = todayKey()
         val current = readingProgress
         val dayMap = current.daily.toMutableMap()
         val daySet = (dayMap[today] ?: emptySet()).toMutableSet()
-        daySet += "$surahNumber:$ayahNumber"
+        val before = daySet.size
+        validAyahs.forEach { ayah -> daySet += "$surahNumber:$ayah" }
+        val added = daySet.size - before
+        if (added <= 0) return
         dayMap[today] = daySet
         val trimmed = trimDaily(dayMap)
         readingProgress = current.copy(
             daily = trimmed,
             lastDate = today,
-            totalVersesRead = (current.totalVersesRead + 1).coerceAtMost(500000)
+            totalVersesRead = (current.totalVersesRead + added).coerceAtMost(500000)
         )
         persistProgress()
         clearSkipMessageIfActive()
@@ -408,6 +434,11 @@ class AppPreferences(context: Context) {
     fun dismissUpdateTag(tag: String) {
         dismissedUpdateTag = tag
         prefs.edit().putString(KEY_DISMISSED_UPDATE, tag).apply()
+    }
+
+    fun markUpdateNotified(tag: String) {
+        updateNotifiedTag = tag
+        prefs.edit().putString(KEY_UPDATE_NOTIFIED, tag).apply()
     }
 
     fun clearDismissedUpdate() {
@@ -632,6 +663,7 @@ class AppPreferences(context: Context) {
         const val KEY_REMINDER_ENABLED = "reminder_enabled"
         const val KEY_REMINDER_HOUR = "reminder_hour"
         const val KEY_REMINDER_MINUTE = "reminder_minute"
+        const val KEY_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
         const val KEY_LAST_AUDIO_SURAH = "last_audio_surah"
         const val KEY_LAST_AUDIO_AYAH = "last_audio_ayah"
         const val KEY_LAST_AUDIO_RECITER = "last_audio_reciter"
@@ -640,6 +672,7 @@ class AppPreferences(context: Context) {
         const val KEY_SKIP_MSG_TEXT = "skip_msg_text"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_ms"
         const val KEY_DISMISSED_UPDATE = "dismissed_update_tag"
+        const val KEY_UPDATE_NOTIFIED = "update_notified_tag"
         const val MAX_BOOKMARKS = 1000
         const val MAX_NOTES = 1000
     }

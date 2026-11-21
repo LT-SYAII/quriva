@@ -2,7 +2,6 @@ package com.quriva.app.ui
 
 import android.Manifest
 import android.app.TimePickerDialog
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,9 +39,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,10 +61,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.AppUpdateInfo
+import com.quriva.app.data.AppUpdateWorker
+import com.quriva.app.data.NotificationAccess
+import com.quriva.app.data.NotificationCenter
 import com.quriva.app.data.ReminderScheduler
 import com.quriva.app.data.Translations
 import com.quriva.app.data.UpdateCheckResult
@@ -75,10 +82,13 @@ import kotlin.math.roundToInt
 
 private const val PREVIEW_BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"
 
+private enum class NotificationPermissionAction { ENABLE_REMINDER, SEND_TEST }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
     prefs: AppPreferences,
+    onUpdateFound: (AppUpdateInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -87,18 +97,70 @@ fun SettingsSheet(
 
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
-    var foundUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var notificationStatus by remember { mutableStateOf<String?>(null) }
+    var notificationAccess by remember { mutableStateOf(NotificationCenter.access(context)) }
+    var updateNotificationAccess by remember {
+        mutableStateOf(NotificationCenter.access(context, NotificationCenter.UPDATE_CHANNEL_ID))
+    }
+    var permissionAction by remember { mutableStateOf<NotificationPermissionAction?>(null) }
     val currentVersion = remember { UpdateRepository.currentVersionName(context) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(Unit) {
+        NotificationCenter.createChannels(context)
+        notificationAccess = NotificationCenter.access(context)
+        updateNotificationAccess = NotificationCenter.access(
+            context,
+            NotificationCenter.UPDATE_CHANNEL_ID
+        )
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notificationAccess = NotificationCenter.access(context)
+                updateNotificationAccess = NotificationCenter.access(
+                    context,
+                    NotificationCenter.UPDATE_CHANNEL_ID
+                )
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        val action = permissionAction
+        permissionAction = null
+        notificationAccess = NotificationCenter.access(context)
+        updateNotificationAccess = NotificationCenter.access(
+            context,
+            NotificationCenter.UPDATE_CHANNEL_ID
+        )
         if (granted) {
-            prefs.updateReminder(true)
-            ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
+            AppUpdateWorker.runNow(context)
+            when (action) {
+                NotificationPermissionAction.ENABLE_REMINDER -> {
+                    prefs.updateReminder(true)
+                    ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
+                    notificationStatus = "Pengingat harian berhasil diaktifkan."
+                }
+                NotificationPermissionAction.SEND_TEST -> {
+                    notificationStatus = if (NotificationCenter.notifyDaily(context, test = true)) {
+                        "Notifikasi uji dikirim. Jika tidak terlihat, periksa mode Jangan Ganggu atau pembatasan baterai."
+                    } else {
+                        "Notifikasi masih diblokir oleh sistem."
+                    }
+                }
+                null -> Unit
+            }
         } else {
-            prefs.updateReminder(false)
-            ReminderScheduler.cancel(context)
+            if (action == NotificationPermissionAction.ENABLE_REMINDER) {
+                prefs.updateReminder(false)
+                ReminderScheduler.cancel(context)
+            }
+            notificationStatus = "Izin notifikasi ditolak. Buka pengaturan Android untuk mengaktifkannya."
         }
     }
 
@@ -106,20 +168,52 @@ fun SettingsSheet(
         if (prefs.reminderEnabled) {
             prefs.updateReminder(false)
             ReminderScheduler.cancel(context)
+            notificationStatus = "Pengingat harian dinonaktifkan."
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val granted = ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-                if (granted) {
+            notificationAccess = NotificationCenter.access(context)
+            when (notificationAccess) {
+                NotificationAccess.GRANTED -> {
                     prefs.updateReminder(true)
                     ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
+                    notificationStatus = "Pengingat harian berhasil diaktifkan."
+                }
+                NotificationAccess.PERMISSION_MISSING -> {
+                    permissionAction = NotificationPermissionAction.ENABLE_REMINDER
+                    prefs.markNotificationPermissionAsked()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+                NotificationAccess.APP_BLOCKED,
+                NotificationAccess.CHANNEL_BLOCKED -> {
+                    notificationStatus = "Notifikasi diblokir. Aktifkan kembali melalui pengaturan Android."
+                    NotificationCenter.openSettings(context)
+                }
+            }
+        }
+    }
+
+    fun sendTestNotification() {
+        notificationAccess = NotificationCenter.access(context)
+        when (notificationAccess) {
+            NotificationAccess.GRANTED -> {
+                notificationStatus = if (NotificationCenter.notifyDaily(context, test = true)) {
+                    "Notifikasi uji dikirim. Jika tidak terlihat, periksa mode Jangan Ganggu atau pembatasan baterai."
                 } else {
+                    "Notifikasi uji gagal dikirim."
+                }
+            }
+            NotificationAccess.PERMISSION_MISSING -> {
+                permissionAction = NotificationPermissionAction.SEND_TEST
+                prefs.markNotificationPermissionAsked()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
-            } else {
-                prefs.updateReminder(true)
-                ReminderScheduler.schedule(context, prefs.reminderHour, prefs.reminderMinute)
+            }
+            NotificationAccess.APP_BLOCKED,
+            NotificationAccess.CHANNEL_BLOCKED -> {
+                notificationStatus = "Notifikasi diblokir. Periksa pengaturan Android."
+                NotificationCenter.openSettings(context)
             }
         }
     }
@@ -144,7 +238,9 @@ fun SettingsSheet(
         checkingUpdate = true
         updateStatus = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { UpdateRepository.checkForUpdate(context) }
+            val result = withContext(Dispatchers.IO) {
+                UpdateRepository.checkForUpdate(context, force = true)
+            }
             prefs.markUpdateChecked()
             checkingUpdate = false
             when (result) {
@@ -153,7 +249,7 @@ fun SettingsSheet(
                 }
                 is UpdateCheckResult.Available -> {
                     updateStatus = "Pembaruan ${result.info.tagName} tersedia."
-                    foundUpdate = result.info
+                    onUpdateFound(result.info)
                 }
                 is UpdateCheckResult.Error -> {
                     updateStatus = result.message
@@ -256,7 +352,7 @@ fun SettingsSheet(
             Spacer(Modifier.height(6.dp))
             SettingToggle(
                 "Notifikasi baca harian",
-                if (prefs.reminderEnabled) "Aktif setiap hari pukul %02d:%02d".format(prefs.reminderHour, prefs.reminderMinute)
+                if (prefs.reminderEnabled) "Dijadwalkan setiap hari sekitar pukul %02d:%02d".format(prefs.reminderHour, prefs.reminderMinute)
                 else "Kirim pengingat harian untuk membaca Al-Qur'an",
                 prefs.reminderEnabled
             ) { toggleReminder() }
@@ -294,9 +390,60 @@ fun SettingsSheet(
             if (prefs.reminderEnabled) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Izin notifikasi dan pengingat setelah perangkat dinyalakan ulang sudah diatur otomatis.",
+                    "Jadwal disimpan oleh sistem dan dipulihkan otomatis setelah perangkat dinyalakan ulang.",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
+                )
+            }
+            if (notificationAccess != NotificationAccess.GRANTED) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colors.surfaceVariant,
+                    border = BorderStroke(1.dp, colors.outline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            when (notificationAccess) {
+                                NotificationAccess.PERMISSION_MISSING -> "Izin notifikasi belum diberikan."
+                                NotificationAccess.APP_BLOCKED -> "Semua notifikasi Quriva diblokir oleh Android."
+                                NotificationAccess.CHANNEL_BLOCKED -> "Channel pengingat Quriva dinonaktifkan."
+                                NotificationAccess.GRANTED -> ""
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onBackground
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { NotificationCenter.openSettings(context) },
+                            shape = CircleShape
+                        ) { Text("Buka pengaturan notifikasi") }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { sendTestNotification() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, colors.outline)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_stat_quriva),
+                    contentDescription = null,
+                    tint = colors.onBackground,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Kirim notifikasi uji", color = colors.onBackground)
+            }
+            AnimatedVisibility(visible = !notificationStatus.isNullOrBlank()) {
+                Text(
+                    notificationStatus.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
@@ -356,6 +503,24 @@ fun SettingsSheet(
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant.copy(alpha = 0.8f)
                     )
+                    if (updateNotificationAccess != NotificationAccess.GRANTED) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Notifikasi pembaruan sedang diblokir oleh Android.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onBackground
+                        )
+                        TextButton(
+                            onClick = {
+                                NotificationCenter.openSettings(
+                                    context,
+                                    NotificationCenter.UPDATE_CHANNEL_ID
+                                )
+                            }
+                        ) {
+                            Text("Periksa channel pembaruan", color = colors.onBackground)
+                        }
+                    }
                 }
             }
 
@@ -371,21 +536,6 @@ fun SettingsSheet(
         }
     }
 
-    val update = foundUpdate
-    if (update != null) {
-        UpdateAvailableDialog(
-            info = update,
-            currentVersion = currentVersion,
-            onDismiss = { foundUpdate = null },
-            onSkipVersion = {
-                prefs.dismissUpdateTag(update.tagName)
-                foundUpdate = null
-            },
-            onOpenRelease = {
-                UpdateRepository.openUrl(context, update.htmlUrl)
-            }
-        )
-    }
 }
 
 @Composable

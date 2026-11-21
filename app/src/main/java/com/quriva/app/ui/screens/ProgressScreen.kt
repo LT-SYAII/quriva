@@ -148,7 +148,7 @@ fun ProgressScreen(
 
                 Spacer(Modifier.height(18.dp))
                 Text(
-                    "Aktivitas dihitung dari ayat yang dibaca dan ayat yang diputar.",
+                    "Diperbarui langsung dari ayat yang terlihat saat dibaca dan ayat yang diputar.",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,

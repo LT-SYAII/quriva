@@ -1,11 +1,14 @@
 package com.quriva.app.data
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
+import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -61,7 +64,7 @@ object UpdateDownloader {
             readTimeout = 60_000
             instanceFollowRedirects = true
             setRequestProperty("Accept", "application/octet-stream")
-            setRequestProperty("User-Agent", "Quriva/1.5.1 (Android)")
+            setRequestProperty("User-Agent", "Quriva/1.5.2 (Android)")
         }
 
         try {
@@ -110,8 +113,30 @@ object UpdateDownloader {
         }
     }
 
-    fun install(context: Context, file: File, expectedVersion: String): InstallResult {
-        if (!file.exists() || file.length() < MIN_APK_BYTES) return InstallResult.INVALID_APK
+    fun canInstall(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            context.packageManager.canRequestPackageInstalls()
+
+    fun installPermissionIntent(context: Context): Intent =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}")
+            )
+        } else {
+            Intent(Settings.ACTION_SECURITY_SETTINGS)
+        }
+
+    suspend fun install(
+        context: Context,
+        file: File,
+        expectedVersion: String
+    ): InstallResult = withContext(Dispatchers.IO) {
+        if (!file.exists() || file.length() < MIN_APK_BYTES) {
+            return@withContext InstallResult.INVALID_APK
+        }
+        if (!canInstall(context)) return@withContext InstallResult.PERMISSION_REQUIRED
+
         val archive = try {
             if (Build.VERSION.SDK_INT >= 33) {
                 context.packageManager.getPackageArchiveInfo(
@@ -130,36 +155,90 @@ object UpdateDownloader {
             UpdateRepository.normalizeVersion(expectedVersion)
         ) {
             file.delete()
-            return InstallResult.INVALID_APK
+            return@withContext InstallResult.INVALID_APK
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !context.packageManager.canRequestPackageInstalls()
-        ) {
-            try {
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:${context.packageName}")
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            } catch (_: Throwable) { }
-            return InstallResult.PERMISSION_REQUIRED
-        }
-        return try {
-            val uri = FileProvider.getUriForFile(
-                context,
-                context.packageName + ".fileprovider",
-                file
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        val installer = context.packageManager.packageInstaller
+        var sessionId = -1
+        try {
+            val params = PackageInstaller.SessionParams(
+                PackageInstaller.SessionParams.MODE_FULL_INSTALL
+            ).apply {
+                setAppPackageName(context.packageName)
+                setSize(file.length())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+                }
             }
-            context.startActivity(intent)
+            sessionId = installer.createSession(params)
+            installer.openSession(sessionId).use { session ->
+                file.inputStream().use { input ->
+                    session.openWrite("base.apk", 0, file.length()).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                        }
+                        session.fsync(output)
+                    }
+                }
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        PendingIntent.FLAG_MUTABLE
+                    } else 0
+                val statusIntent = Intent(context, InstallStatusReceiver::class.java)
+                    .putExtra(InstallStatusReceiver.EXTRA_APK_PATH, file.absolutePath)
+                val status = PendingIntent.getBroadcast(
+                    context,
+                    sessionId,
+                    statusIntent,
+                    flags
+                )
+                session.commit(status.intentSender)
+            }
             InstallResult.STARTED
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            if (sessionId >= 0) runCatching { installer.abandonSession(sessionId) }
+            if (t is kotlinx.coroutines.CancellationException) throw t
             InstallResult.FAILED
         }
+    }
+}
+
+/** Opens the confirmation UI emitted by PackageInstaller and cleans cached APKs. */
+class InstallStatusReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val status = intent.getIntExtra(
+            PackageInstaller.EXTRA_STATUS,
+            PackageInstaller.STATUS_FAILURE
+        )
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            @Suppress("DEPRECATION")
+            val confirmation = if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+            } else {
+                intent.getParcelableExtra(Intent.EXTRA_INTENT)
+            } ?: return
+            runCatching {
+                context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            return
+        }
+        intent.getStringExtra(EXTRA_APK_PATH)?.let { path ->
+            runCatching { File(path).delete() }
+        }
+        if (status != PackageInstaller.STATUS_SUCCESS) {
+            Toast.makeText(
+                context,
+                "Pemasangan pembaruan gagal. Coba unduh kembali dari Quriva.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    companion object {
+        const val EXTRA_APK_PATH = "update_apk_path"
     }
 }

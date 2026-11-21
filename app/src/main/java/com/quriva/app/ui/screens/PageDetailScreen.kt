@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -40,15 +42,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quriva.app.R
 import com.quriva.app.data.PageAyah
+import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.QuranApi
 import com.quriva.app.ui.AnimatedListItem
 import com.quriva.app.ui.interactiveClickable
 import com.quriva.app.ui.theme.ArabicFontFamily
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun PageDetailScreen(
     page: Int,
+    prefs: AppPreferences,
     onBack: () -> Unit,
     onOpenAyah: (surah: Int, ayah: Int) -> Unit
 ) {
@@ -57,6 +64,7 @@ fun PageDetailScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var verses by remember { mutableStateOf<List<PageAyah>>(emptyList()) }
     var reloadKey by remember { mutableIntStateOf(0) }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(page, reloadKey) {
         loading = true
@@ -70,6 +78,31 @@ fun PageDetailScreen(
         } finally {
             loading = false
         }
+    }
+
+    LaunchedEffect(verses) {
+        if (verses.isEmpty()) return@LaunchedEffect
+        snapshotFlow {
+            val visible = listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { item -> verses.getOrNull(item.index) }
+                .map { it.verseKey }
+                .distinct()
+            listState.isScrollInProgress to visible
+        }
+            .filter { (scrolling, visible) -> !scrolling && visible.isNotEmpty() }
+            .map { it.second }
+            .distinctUntilChanged()
+            .collect { keys ->
+                keys.mapNotNull { key ->
+                    val surah = key.substringBefore(':').toIntOrNull()
+                    val ayah = key.substringAfter(':').toIntOrNull()
+                    if (surah != null && ayah != null) surah to ayah else null
+                }
+                    .groupBy({ it.first }, { it.second })
+                    .forEach { (surah, ayahs) ->
+                        prefs.recordReadingProgress(surah, ayahs)
+                    }
+            }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
@@ -115,7 +148,11 @@ fun PageDetailScreen(
                         ) { Text("Muat ulang") }
                     }
                 }
-                else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 28.dp)
+                ) {
                     itemsIndexed(verses, key = { _, v -> v.verseKey }) { index, v ->
                         AnimatedListItem(index = index) {
                             Column(

@@ -85,11 +85,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
-import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.DailyContent
-import com.quriva.app.data.ReminderScheduler
-import com.quriva.app.data.UpdateCheckResult
-import com.quriva.app.data.UpdateRepository
 import com.quriva.app.model.LastRead
 import com.quriva.app.model.SearchResult
 import com.quriva.app.model.SurahMeta
@@ -97,10 +93,7 @@ import com.quriva.app.ui.HomeUiState
 import com.quriva.app.ui.HomeViewModel
 import com.quriva.app.ui.HomeViewModelFactory
 import com.quriva.app.ui.ProgressViewModel
-import com.quriva.app.ui.UpdateAvailableDialog
 import com.quriva.app.ui.theme.ArabicFontFamily
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private enum class SurahFilter(val label: String) {
     ALL("Semua"),
@@ -136,9 +129,6 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         prefs.evaluateSkipMessage()
-        if (prefs.reminderEnabled) {
-            ReminderScheduler.schedule(application, prefs.reminderHour, prefs.reminderMinute)
-        }
     }
     LaunchedEffect(success) {
         if (success != null) {
@@ -165,23 +155,6 @@ fun HomeScreen(
 
     val streak = ProgressViewModel.compute(prefs)
     val skipMessage = if (prefs.skipMessageDate.isNotBlank()) prefs.skipMessageText else ""
-    var pendingUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
-
-    LaunchedEffect(Unit) {
-        val now = System.currentTimeMillis()
-        if (now - prefs.lastUpdateCheckMs >= 12L * 60 * 60 * 1000) {
-            when (val result = withContext(Dispatchers.IO) { UpdateRepository.checkForUpdate(context) }) {
-                is UpdateCheckResult.Available -> {
-                    prefs.markUpdateChecked()
-                    if (result.info.tagName != prefs.dismissedUpdateTag) {
-                        pendingUpdate = result.info
-                    }
-                }
-                is UpdateCheckResult.UpToDate -> prefs.markUpdateChecked()
-                is UpdateCheckResult.Error -> { /* silent on auto-check */ }
-            }
-        }
-    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(
@@ -277,21 +250,6 @@ fun HomeScreen(
         }
     }
 
-    val update = pendingUpdate
-    if (update != null) {
-        UpdateAvailableDialog(
-            info = update,
-            currentVersion = UpdateRepository.currentVersionName(context),
-            onDismiss = { pendingUpdate = null },
-            onSkipVersion = {
-                prefs.dismissUpdateTag(update.tagName)
-                pendingUpdate = null
-            },
-            onOpenRelease = {
-                UpdateRepository.openUrl(context, update.htmlUrl)
-            }
-        )
-    }
 }
 
 @Composable

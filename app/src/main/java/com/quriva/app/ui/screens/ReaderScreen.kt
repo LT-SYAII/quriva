@@ -209,17 +209,24 @@ fun ReaderScreen(
         if (target > 1) {
             listState.scrollToItem(target)
         }
-        snapshotFlow { listState.isScrollInProgress to listState.firstVisibleItemIndex }
-            .filter { !it.first }
+        snapshotFlow {
+            val visibleAyahs = listState.layoutInfo.visibleItemsInfo
+                .map { it.index }
+                .filter { it in 1..data.meta.ayahCount }
+                .distinct()
+            listState.isScrollInProgress to visibleAyahs
+        }
+            .filter { (scrolling, visibleAyahs) -> !scrolling && visibleAyahs.isNotEmpty() }
             .map { it.second }
             .distinctUntilChanged()
-            .collect { index ->
-                val ayah = index.coerceIn(1, data.meta.ayahCount)
+            .collect { visibleAyahs ->
+                val ayah = visibleAyahs.first().coerceIn(1, data.meta.ayahCount)
                 prefs.saveLastRead(
                     surahNumber = data.meta.number,
                     surahName = data.meta.latinName,
                     ayah = ayah,
-                    total = data.meta.ayahCount
+                    total = data.meta.ayahCount,
+                    visibleAyahs = visibleAyahs
                 )
             }
     }

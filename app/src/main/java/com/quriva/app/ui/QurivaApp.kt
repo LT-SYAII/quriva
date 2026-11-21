@@ -31,7 +31,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.quriva.app.data.AppPreferences
+import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.SurahAudioPlayer
+import com.quriva.app.data.UpdateCheckResult
+import com.quriva.app.data.UpdateRepository
 import com.quriva.app.ui.screens.BookmarksScreen
 import com.quriva.app.ui.screens.HomeScreen
 import com.quriva.app.ui.screens.JuzScreen
@@ -44,8 +47,21 @@ import com.quriva.app.ui.screens.SearchScreen
 import com.quriva.app.ui.theme.QurivaTheme
 
 @Composable
-fun QurivaApp(prefs: AppPreferences) {
+fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
     val context = LocalContext.current
+    var pendingUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    LaunchedEffect(updateRequestKey) {
+        when (val result = UpdateRepository.checkForUpdate(context)) {
+            is UpdateCheckResult.Available -> {
+                prefs.markUpdateChecked()
+                if (result.info.tagName != prefs.dismissedUpdateTag) {
+                    pendingUpdate = result.info
+                }
+            }
+            is UpdateCheckResult.UpToDate -> prefs.markUpdateChecked()
+            is UpdateCheckResult.Error -> Unit
+        }
+    }
     val audioPlayer = remember { SurahAudioPlayer(context) }
     DisposableEffect(audioPlayer, prefs) {
         audioPlayer.onAyahPlayed = { _, _ -> prefs.recordPlayActivity(1) }
@@ -188,6 +204,7 @@ fun QurivaApp(prefs: AppPreferences) {
                     val page = entry.arguments?.getInt("page") ?: 1
                     PageDetailScreen(
                         page = page,
+                        prefs = prefs,
                         onBack = { navController.popBackStack() },
                         onOpenAyah = { surah, ayah -> navController.navigate("reader/$surah?ayah=$ayah") }
                     )
@@ -219,7 +236,25 @@ fun QurivaApp(prefs: AppPreferences) {
         if (showSettings) {
             SettingsSheet(
                 prefs = prefs,
+                onUpdateFound = { info ->
+                    pendingUpdate = info
+                    showSettings = false
+                },
                 onDismiss = { showSettings = false }
+            )
+        }
+
+        val update = pendingUpdate
+        if (update != null) {
+            UpdateAvailableDialog(
+                info = update,
+                currentVersion = UpdateRepository.currentVersionName(context),
+                onDismiss = { pendingUpdate = null },
+                onSkipVersion = {
+                    prefs.dismissUpdateTag(update.tagName)
+                    pendingUpdate = null
+                },
+                onOpenRelease = { UpdateRepository.openUrl(context, update.htmlUrl) }
             )
         }
     }

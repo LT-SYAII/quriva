@@ -1,5 +1,7 @@
 package com.quriva.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
@@ -75,6 +77,54 @@ fun UpdateAvailableDialog(
     var downloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf(0f) }
     var downloadError by remember { mutableStateOf<String?>(null) }
+    val startInstall: () -> Unit = start@{
+        val url = info.apkDownloadUrl
+        if (url.isNullOrBlank()) {
+            onOpenRelease()
+            return@start
+        }
+        if (downloading) return@start
+        downloading = true
+        downloadProgress = 0f
+        downloadError = null
+        scope.launch {
+            try {
+                val file = UpdateDownloader.download(
+                    context = context,
+                    url = url,
+                    expectedSize = info.apkSize,
+                    onProgress = { downloadProgress = it }
+                )
+                when (UpdateDownloader.install(context, file, info.versionName)) {
+                    UpdateDownloader.InstallResult.STARTED -> onDismiss()
+                    UpdateDownloader.InstallResult.PERMISSION_REQUIRED -> {
+                        downloadError = "Izin pemasangan belum diberikan. Coba lagi."
+                    }
+                    UpdateDownloader.InstallResult.INVALID_APK -> {
+                        downloadError = "Berkas pembaruan tidak valid. Coba unduh lagi."
+                    }
+                    UpdateDownloader.InstallResult.FAILED -> {
+                        downloadError = "Pemasang Android tidak dapat dimulai. Coba lagi."
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                downloadError = UpdateRepository.friendlyError(t)
+            } finally {
+                downloading = false
+            }
+        }
+    }
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (UpdateDownloader.canInstall(context)) {
+            startInstall()
+        } else {
+            downloadError = "Aktifkan izin ‘Instal aplikasi tidak dikenal’ untuk Quriva."
+        }
+    }
     val visibleState = remember {
         MutableTransitionState(false).apply { targetState = true }
     }
@@ -182,37 +232,16 @@ fun UpdateAvailableDialog(
                                 val url = info.apkDownloadUrl
                                 if (url.isNullOrBlank()) {
                                     onOpenRelease()
-                                } else if (!downloading) {
-                                    downloading = true
-                                    downloadProgress = 0f
+                                } else if (UpdateDownloader.canInstall(context)) {
+                                    startInstall()
+                                } else {
                                     downloadError = null
-                                    scope.launch {
-                                        try {
-                                            val file = UpdateDownloader.download(
-                                                context = context,
-                                                url = url,
-                                                expectedSize = info.apkSize,
-                                                onProgress = { downloadProgress = it }
-                                            )
-                                            when (UpdateDownloader.install(context, file, info.versionName)) {
-                                                UpdateDownloader.InstallResult.STARTED -> onDismiss()
-                                                UpdateDownloader.InstallResult.PERMISSION_REQUIRED -> {
-                                                    downloadError = "Izinkan pemasangan dari Quriva, lalu tekan tombol unduh lagi."
-                                                }
-                                                UpdateDownloader.InstallResult.INVALID_APK -> {
-                                                    downloadError = "Berkas pembaruan tidak valid. Coba unduh lagi."
-                                                }
-                                                UpdateDownloader.InstallResult.FAILED -> {
-                                                    downloadError = "Pemasang Android tidak dapat dibuka. Coba lagi."
-                                                }
-                                            }
-                                        } catch (e: CancellationException) {
-                                            throw e
-                                        } catch (t: Throwable) {
-                                            downloadError = UpdateRepository.friendlyError(t)
-                                        } finally {
-                                            downloading = false
-                                        }
+                                    runCatching {
+                                        installPermissionLauncher.launch(
+                                            UpdateDownloader.installPermissionIntent(context)
+                                        )
+                                    }.onFailure {
+                                        downloadError = "Pengaturan izin pemasangan tidak dapat dibuka."
                                     }
                                 }
                             },
