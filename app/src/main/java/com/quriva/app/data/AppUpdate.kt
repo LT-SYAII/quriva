@@ -104,9 +104,9 @@ object UpdateRepository {
                 @Suppress("DEPRECATION")
                 pm.getPackageInfo(pkg, 0)
             }
-            pInfo.versionName ?: "1.5.2"
+            pInfo.versionName ?: "2.0.0"
         } catch (_: Throwable) {
-            "1.5.2"
+            "2.0.0"
         }
     }
 

@@ -62,6 +62,42 @@
 
 ---
 
+## 🌿 Koleksi Islami
+
+- **Doa Harian & Doa Pilihan** — teks Arab, Latin, arti Indonesia, faedah, dan sumber.
+- **Dzikir Pagi, Petang, dan Setelah Salat** — dilengkapi target pengulangan dan penghitung bacaan.
+- **Asmaul Husna** — 99 nama Allah beserta tulisan Arab dan arti Indonesia.
+- **Arbain Nawawi** — 42 hadis dengan teks Arab dan terjemahan Inggris yang diberi label jelas.
+- Seluruh koleksi tersedia offline, dapat dicari, dan dapat ditandai sebagai favorit.
+
+---
+
+## 🧠 Hafalan & Murajaah
+
+- Pilih rentang ayat, sembunyikan teks/terjemahan, ungkap jawaban, dan putar rentang berulang.
+- Status **Baru, Sedang Dihafal, Perlu Murajaah,** dan **Lancar**.
+- Jadwal murajaah otomatis serta daftar yang jatuh tempo hari ini.
+
+---
+
+## 🗓️ Kalender Islam & Jumat
+
+- Countdown peristiwa Islam, Idulfitri, Iduladha, Ramadan, Arafah, Asyura, Isra Mikraj, dan lainnya.
+- Ayyamul Bidh, koreksi kalender Hijriah ±2 hari, serta label tanggal perkiraan.
+- Pengingat Jumat pagi dan pengingat Kamis malam yang dapat diaktifkan.
+- Halaman Jumat dengan akses cepat ke Surah Al-Kahf dan daftar amalan.
+
+---
+
+## ♿ Aksesibilitas & Navigasi
+
+- Kontras tinggi, kontrol besar, kurangi animasi, layar tetap menyala, dan jarak baris Arab.
+- Navigasi offline melalui Hizb, Rub el Hizb, Manzil, Ruku, Sajdah, Juz, dan 604 halaman.
+- Tajwid interaktif: ketuk warna tajwid untuk membaca penjelasan dan gunakan kuis singkat.
+- Pusat audio offline dengan antrean, pilihan Wi-Fi, unduh per surah/juz, progres, dan pengelolaan penyimpanan.
+
+---
+
 ## 🔎 Cari & Jelajahi
 
 - **Cari Surah** — temukan surah berdasarkan nama, arti, nomor, atau teks Arab, dengan penyaring Makkiyah/Madaniyah.
@@ -95,7 +131,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 1.5.2
+- **Versi:** 2.0.0
 - **Pembuat:** Bang syaii
 
 ---

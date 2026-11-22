@@ -396,7 +396,7 @@ class SurahAudioPlayer(context: Context) {
             val dir = audioDir(context)
             dir.listFiles { _, name ->
                 name.startsWith("${reciter}_${surah}_") &&
-                    (name.endsWith(".mp3") || name.endsWith(".part"))
+                    (name.endsWith(".mp3") || name.endsWith(".part") || name.endsWith(".ok"))
             }?.forEach { it.delete() }
             val marker = downloadMarker(context, surah, reciter)
             marker.delete()

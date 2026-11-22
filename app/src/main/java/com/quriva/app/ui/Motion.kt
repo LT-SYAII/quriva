@@ -14,20 +14,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
+
+val LocalReduceMotion = staticCompositionLocalOf { false }
 
 fun Modifier.interactiveClickable(
     enabled: Boolean = true,
     pressedScale: Float = 0.97f,
     onClick: () -> Unit
 ): Modifier = composed {
+    val reduceMotion = LocalReduceMotion.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (enabled && pressed) pressedScale else 1f,
+        targetValue = if (!reduceMotion && enabled && pressed) pressedScale else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow
@@ -57,19 +61,20 @@ fun AnimatedListItem(
     index: Int = 0,
     content: @Composable () -> Unit
 ) {
+    val reduceMotion = LocalReduceMotion.current
     var visible by remember { mutableStateOf(false) }
     val animatedAlpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
+        targetValue = if (visible || reduceMotion) 1f else 0f,
         animationSpec = tween(260),
         label = "listItemAlpha"
     )
     val animatedOffset by animateFloatAsState(
-        targetValue = if (visible) 0f else 14f,
+        targetValue = if (visible || reduceMotion) 0f else 14f,
         animationSpec = tween(300),
         label = "listItemOffset"
     )
     LaunchedEffect(Unit) {
-        val stagger = if (index in 1..8) index * 28L else 0L
+        val stagger = if (!reduceMotion && index in 1..8) index * 28L else 0L
         delay(stagger)
         visible = true
     }

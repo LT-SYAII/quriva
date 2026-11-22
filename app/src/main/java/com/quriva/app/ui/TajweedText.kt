@@ -25,13 +25,37 @@ fun parseTajweed(tagged: String, base: Color): AnnotatedString {
             val cls = m.groupValues[1]
             val inner = stripTags(m.groupValues[2])
             val color = tajweedColor(cls, base)
+            val start = length
             withStyle(SpanStyle(color = color)) { append(inner) }
+            addStringAnnotation("TAJWEED", cls, start, length)
             last = m.range.last + 1
         }
         if (last < text.length) {
             withStyle(SpanStyle(color = base)) { append(stripTags(text.substring(last))) }
         }
     }
+}
+
+data class TajweedRuleInfo(val name: String, val explanation: String)
+
+object TajweedRules {
+    private val rules = mapOf(
+        "ham_wasl" to TajweedRuleInfo("Hamzah Wasal", "Dibaca ketika memulai dan gugur ketika disambung dari kata sebelumnya."),
+        "laam_shamsiyah" to TajweedRuleInfo("Lam Syamsiyah", "Lam tidak dibaca dan huruf sesudahnya dibaca tasydid."),
+        "madda_normal" to TajweedRuleInfo("Mad Thabi'i", "Dipanjangkan dua harakat."),
+        "madda_permissible" to TajweedRuleInfo("Mad Jaiz", "Boleh dipanjangkan sesuai riwayat bacaan."),
+        "madda_necessary" to TajweedRuleInfo("Mad Lazim", "Dibaca panjang enam harakat."),
+        "madda_obligatory" to TajweedRuleInfo("Mad Wajib", "Dibaca lebih panjang karena bertemu hamzah dalam satu kata."),
+        "ikhafa" to TajweedRuleInfo("Ikhfa", "Nun sukun atau tanwin dibaca samar dengan dengung."),
+        "ikhafa_shafawi" to TajweedRuleInfo("Ikhfa Syafawi", "Mim sukun bertemu ba, dibaca samar dengan dengung."),
+        "idgham_with_ghunnah" to TajweedRuleInfo("Idgham Bighunnah", "Nun sukun atau tanwin melebur dengan dengung."),
+        "idgham_without_ghunnah" to TajweedRuleInfo("Idgham Bilaghunnah", "Nun sukun atau tanwin melebur tanpa dengung."),
+        "iqlab" to TajweedRuleInfo("Iqlab", "Nun sukun atau tanwin berubah menjadi bunyi mim samar."),
+        "qalqalah" to TajweedRuleInfo("Qalqalah", "Huruf qalqalah sukun dibaca memantul."),
+        "ghunnah" to TajweedRuleInfo("Ghunnah", "Nun atau mim tasydid dibaca dengung dua harakat.")
+    )
+    fun info(id: String): TajweedRuleInfo = rules[id] ?: TajweedRuleInfo(id.replace('_', ' ').replaceFirstChar { it.uppercase() }, "Ikuti warna dan dengarkan bacaan qari untuk contoh pelafalan.")
+    fun all(): List<Pair<String, TajweedRuleInfo>> = rules.toList()
 }
 
 private fun stripTags(s: String): String = s.replace(Regex("<[^>]+>"), "")

@@ -16,6 +16,7 @@ import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.AppUpdateWorker
 import com.quriva.app.data.NotificationCenter
 import com.quriva.app.data.ReminderScheduler
+import com.quriva.app.data.IslamicReminderScheduler
 import com.quriva.app.ui.QurivaApp
 
 class MainActivity : ComponentActivity() {
@@ -45,6 +46,12 @@ class MainActivity : ComponentActivity() {
                 preferences.reminderHour,
                 preferences.reminderMinute
             )
+        }
+        if (preferences.fridayReminderEnabled) IslamicReminderScheduler.scheduleFriday(this, preferences.fridayReminderHour, preferences.fridayReminderMinute)
+        if (preferences.thursdayNightReminder) IslamicReminderScheduler.scheduleThursdayNight(this)
+        if (preferences.islamicEventNotifications) {
+            IslamicReminderScheduler.scheduleEvents(this)
+            IslamicReminderScheduler.checkEventsNow(this)
         }
         enableEdgeToEdge()
         setContent {

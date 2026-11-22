@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +45,8 @@ import com.quriva.app.R
 import com.quriva.app.data.PageAyah
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.QuranApi
+import com.quriva.app.data.QuranNavigationRepository
+import com.quriva.app.data.QuranRepository
 import com.quriva.app.ui.AnimatedListItem
 import com.quriva.app.ui.interactiveClickable
 import com.quriva.app.ui.theme.ArabicFontFamily
@@ -59,6 +62,7 @@ fun PageDetailScreen(
     onBack: () -> Unit,
     onOpenAyah: (surah: Int, ayah: Int) -> Unit
 ) {
+    val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -70,7 +74,11 @@ fun PageDetailScreen(
         loading = true
         error = null
         try {
-            verses = QuranApi.versesByPage(page)
+            val points = QuranNavigationRepository.page(context, page)
+            verses = points.map { p ->
+                val ayah = QuranRepository.getSurah(context, p.surah).ayahs.first { it.numberInSurah == p.ayah }
+                PageAyah(p.surah, p.ayah, "${p.surah}:${p.ayah}", ayah.arabic, p.page, p.juz, p.hizb, p.rub, p.manzil)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +24,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +62,16 @@ fun BookmarksScreen(
     val colors = MaterialTheme.colorScheme
     val bookmarks = prefs.bookmarks
     var showClearDialog by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var folder by remember { mutableStateOf("") }
+    var editBookmark by remember { mutableStateOf<Bookmark?>(null) }
+    val folders = remember(bookmarks) { prefs.bookmarkFolders() }
+    val visible = remember(bookmarks, query, folder) {
+        bookmarks.filter { b ->
+            (folder.isBlank() || b.folder == folder) &&
+                (query.isBlank() || b.surahName.contains(query, true) || b.translation.contains(query, true) || b.tags.any { it.contains(query, true) })
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -108,6 +122,14 @@ fun BookmarksScreen(
                 }
             }
 
+            if (bookmarks.isNotEmpty()) {
+                OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("Cari bookmark atau tag") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp)) {
+                    FilterChip(selected = folder.isBlank(), onClick = { folder = "" }, label = { Text("Semua") })
+                    folders.forEach { name -> Spacer(Modifier.size(6.dp)); FilterChip(selected = folder == name, onClick = { folder = name }, label = { Text(name) }) }
+                }
+            }
+
             if (bookmarks.isEmpty()) {
                 EmptyBookmarks()
             } else {
@@ -116,7 +138,7 @@ fun BookmarksScreen(
                     contentPadding = PaddingValues(top = 10.dp, bottom = 28.dp)
                 ) {
                     itemsIndexed(
-                        items = bookmarks,
+                        items = visible,
                         key = { _, bookmark -> "${bookmark.surahNumber}:${bookmark.ayahNumber}" },
                         contentType = { _, _ -> "bookmark" }
                     ) { index, bookmark ->
@@ -126,7 +148,8 @@ fun BookmarksScreen(
                                 onClick = { onOpenAyah(bookmark.surahNumber, bookmark.ayahNumber) },
                                 onRemove = {
                                     prefs.removeBookmark(bookmark.surahNumber, bookmark.ayahNumber)
-                                }
+                                },
+                                onEdit = { editBookmark = bookmark }
                             )
                         }
                     }
@@ -160,13 +183,28 @@ fun BookmarksScreen(
             textContentColor = colors.onSurfaceVariant
         )
     }
+    editBookmark?.let { item ->
+        var folderText by remember(item) { mutableStateOf(item.folder) }
+        var tagText by remember(item) { mutableStateOf(item.tags.joinToString(", ")) }
+        AlertDialog(onDismissRequest = { editBookmark = null }, title = { Text("Folder & tag") }, text = {
+            Column {
+                OutlinedTextField(folderText, { folderText = it }, label = { Text("Folder") }, singleLine = true)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(tagText, { tagText = it }, label = { Text("Tag, pisahkan dengan koma") })
+            }
+        }, confirmButton = { TextButton(onClick = {
+            prefs.updateBookmarkMeta(item.surahNumber, item.ayahNumber, folderText.trim(), tagText.split(',').map { it.trim() }.filter { it.isNotBlank() })
+            editBookmark = null
+        }) { Text("Simpan") } }, dismissButton = { TextButton(onClick = { editBookmark = null }) { Text("Batal") } })
+    }
 }
 
 @Composable
 private fun BookmarkRow(
     bookmark: Bookmark,
     onClick: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onEdit: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
@@ -187,6 +225,9 @@ private fun BookmarkRow(
                     color = colors.onBackground,
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(onClick = onEdit, modifier = Modifier.size(34.dp)) {
+                    Icon(painterResource(R.drawable.ic_tune), "Atur folder dan tag", Modifier.size(17.dp))
+                }
                 IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_bookmark_filled),
@@ -213,6 +254,10 @@ private fun BookmarkRow(
                 )
             }
             Spacer(Modifier.height(7.dp))
+            if (bookmark.folder.isNotBlank() || bookmark.tags.isNotEmpty()) {
+                Text((listOfNotNull(bookmark.folder.takeIf { it.isNotBlank() }) + bookmark.tags).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = colors.onBackground)
+                Spacer(Modifier.height(4.dp))
+            }
             Text(
                 text = bookmark.translation,
                 modifier = Modifier.padding(end = 12.dp),

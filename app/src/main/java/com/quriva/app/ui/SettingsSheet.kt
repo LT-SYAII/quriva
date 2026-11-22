@@ -68,6 +68,7 @@ import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.AppUpdateInfo
 import com.quriva.app.data.AppUpdateWorker
+import com.quriva.app.data.BackupRepository
 import com.quriva.app.data.NotificationAccess
 import com.quriva.app.data.NotificationCenter
 import com.quriva.app.data.ReminderScheduler
@@ -98,6 +99,7 @@ fun SettingsSheet(
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
     var notificationStatus by remember { mutableStateOf<String?>(null) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
     var notificationAccess by remember { mutableStateOf(NotificationCenter.access(context)) }
     var updateNotificationAccess by remember {
         mutableStateOf(NotificationCenter.access(context, NotificationCenter.UPDATE_CHANNEL_ID))
@@ -105,6 +107,15 @@ fun SettingsSheet(
     var permissionAction by remember { mutableStateOf<NotificationPermissionAction?>(null) }
     val currentVersion = remember { UpdateRepository.currentVersionName(context) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val exportJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        backupStatus = if (uri != null && runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportUserData().toByteArray()) } }.isSuccess) "Backup JSON tersimpan." else "Backup gagal disimpan."
+    }
+    val exportPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        backupStatus = if (uri != null && runCatching { context.contentResolver.openOutputStream(uri)?.use { BackupRepository.writePdf(it, prefs) } }.isSuccess) "PDF tersimpan." else "PDF gagal dibuat."
+    }
+    val importJson = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        backupStatus = if (uri != null && runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { prefs.importUserData(it.readText()) } ?: false }.getOrDefault(false)) "Backup berhasil dipulihkan." else "Berkas backup tidak valid."
+    }
 
     LaunchedEffect(Unit) {
         NotificationCenter.createChannels(context)
@@ -312,6 +323,20 @@ fun SettingsSheet(
             SettingLabel(title = "Ukuran terjemahan", value = "${prefs.translationSize.roundToInt()} sp")
             Slider(value = prefs.translationSize, onValueChange = { prefs.updateTranslationSize(it) }, valueRange = 12f..24f, colors = sliderColors())
 
+            Spacer(Modifier.height(22.dp))
+            Text("Aksesibilitas", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+            Spacer(Modifier.height(8.dp))
+            SettingToggle("Kontras tinggi", "Pertegas perbedaan teks, garis, dan permukaan", prefs.highContrast) { prefs.updateAccessibility(highContrast = it) }
+            Spacer(Modifier.height(8.dp))
+            SettingToggle("Kontrol besar", "Area sentuh dan tombol lebih mudah digunakan", prefs.largeControls) { prefs.updateAccessibility(largeControls = it) }
+            Spacer(Modifier.height(8.dp))
+            SettingToggle("Kurangi animasi", "Nonaktifkan transisi dan efek gerak utama", prefs.reduceMotion) { prefs.updateAccessibility(reduceMotion = it) }
+            Spacer(Modifier.height(8.dp))
+            SettingToggle("Layar tetap menyala", "Cocok untuk membaca dan dzikir", prefs.keepScreenOn) { prefs.updateAccessibility(keepScreenOn = it) }
+            Spacer(Modifier.height(10.dp))
+            SettingLabel("Jarak baris teks Arab", "${"%.1f".format(prefs.arabicLineSpacing)}×")
+            Slider(value = prefs.arabicLineSpacing, onValueChange = { prefs.updateAccessibility(lineSpacing = it) }, valueRange = 1.5f..2.5f, steps = 4, colors = sliderColors())
+
             Spacer(Modifier.height(20.dp))
             Text("Terjemahan", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
             Spacer(Modifier.height(8.dp))
@@ -446,6 +471,16 @@ fun SettingsSheet(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
+
+            Spacer(Modifier.height(22.dp))
+            Text("Backup & Ekspor", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { exportJson.launch("Quriva-backup.json") }, modifier = Modifier.weight(1f), shape = CircleShape) { Text("Backup JSON") }
+                OutlinedButton(onClick = { exportPdf.launch("Quriva-catatan.pdf") }, modifier = Modifier.weight(1f), shape = CircleShape) { Text("Ekspor PDF") }
+            }
+            OutlinedButton(onClick = { importJson.launch(arrayOf("application/json", "text/plain")) }, modifier = Modifier.fillMaxWidth(), shape = CircleShape) { Text("Pulihkan backup") }
+            AnimatedVisibility(!backupStatus.isNullOrBlank()) { Text(backupStatus.orEmpty(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp)) }
 
             Spacer(Modifier.height(22.dp))
             PreviewCard(prefs)

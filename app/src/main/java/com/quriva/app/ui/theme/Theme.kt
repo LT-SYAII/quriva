@@ -161,11 +161,27 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun QurivaTheme(
     darkTheme: Boolean,
+    highContrast: Boolean = false,
+    largeText: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val base = if (darkTheme) DarkColors else LightColors
+    val colors = if (!highContrast) base else if (darkTheme) base.copy(
+        onSurfaceVariant = Color.White, outline = Color(0xFF737373), outlineVariant = Color(0xFF525252)
+    ) else base.copy(
+        onSurfaceVariant = Color.Black, outline = Color(0xFF525252), outlineVariant = Color(0xFF737373)
+    )
+    val typography = if (!largeText) QurivaTypography else QurivaTypography.copy(
+        bodyLarge = QurivaTypography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 27.sp),
+        bodyMedium = QurivaTypography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 24.sp),
+        bodySmall = QurivaTypography.bodySmall.copy(fontSize = 14.sp, lineHeight = 21.sp),
+        labelLarge = QurivaTypography.labelLarge.copy(fontSize = 16.sp),
+        labelMedium = QurivaTypography.labelMedium.copy(fontSize = 14.sp),
+        labelSmall = QurivaTypography.labelSmall.copy(fontSize = 13.sp)
+    )
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = QurivaTypography,
+        colorScheme = colors,
+        typography = typography,
         shapes = QurivaShapes,
         content = content
     )

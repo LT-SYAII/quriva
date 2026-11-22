@@ -27,6 +27,9 @@ object NotificationCenter {
 
     const val REMINDER_CHANNEL_ID = "quriva_daily_reminder"
     const val UPDATE_CHANNEL_ID = "quriva_app_updates"
+    const val FRIDAY_CHANNEL_ID = "quriva_friday"
+    const val EVENT_CHANNEL_ID = "quriva_islamic_events"
+    const val DOWNLOAD_CHANNEL_ID = "quriva_audio_downloads"
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -42,7 +45,13 @@ object NotificationCenter {
                     UPDATE_CHANNEL_ID,
                     "Pembaruan Quriva",
                     NotificationManager.IMPORTANCE_DEFAULT
-                ).apply { description = "Pemberitahuan saat versi Quriva terbaru tersedia" }
+                ).apply { description = "Pemberitahuan saat versi Quriva terbaru tersedia" },
+                NotificationChannel(FRIDAY_CHANNEL_ID, "Hari Jumat", NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply { description = "Pengingat khusus amalan hari Jumat" },
+                NotificationChannel(EVENT_CHANNEL_ID, "Peristiwa Islam", NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply { description = "Countdown dan pengingat peristiwa Islam" },
+                NotificationChannel(DOWNLOAD_CHANNEL_ID, "Unduhan Audio", NotificationManager.IMPORTANCE_LOW)
+                    .apply { description = "Progres unduhan audio offline" }
             )
         )
     }
@@ -151,6 +160,45 @@ object NotificationCenter {
             manager.notify(UPDATE_NOTIFICATION_ID, notification)
             true
         }.getOrDefault(false)
+    }
+
+    fun notifyFriday(context: Context): Boolean = notifySimple(
+        context, FRIDAY_CHANNEL_ID, 41_010, "Hari Jumat",
+        "Jangan lupa membaca Surah Al-Kahf, memperbanyak selawat, doa, dan istigfar."
+    )
+
+    fun notifyIslamicEvent(context: Context, title: String, text: String, id: Int): Boolean =
+        notifySimple(context, EVENT_CHANNEL_ID, 42_000 + (id and 0x7ff), title, text)
+
+    fun notifyDownload(context: Context, title: String, progress: Int, done: Boolean = false): Boolean {
+        createChannels(context)
+        if (access(context, DOWNLOAD_CHANNEL_ID) != NotificationAccess.GRANTED) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
+        val notification = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_quriva).setContentTitle(title)
+            .setContentText(if (done) "Tersedia untuk didengar offline" else "Mengunduh… $progress%")
+            .setOnlyAlertOnce(true).setOngoing(!done).setAutoCancel(done)
+            .setProgress(100, progress.coerceIn(0, 100), false).build()
+        return runCatching { NotificationManagerCompat.from(context).notify(43_001, notification); true }.getOrDefault(false)
+    }
+
+    private fun notifySimple(context: Context, channel: String, id: Int, title: String, text: String): Boolean {
+        createChannels(context)
+        if (access(context, channel) != NotificationAccess.GRANTED) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
+        val pi = PendingIntent.getActivity(
+            context, id, Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_stat_quriva)
+            .setContentTitle(title).setContentText(text).setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(pi).setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_DEFAULT).build()
+        return runCatching { NotificationManagerCompat.from(context).notify(id, n); true }.getOrDefault(false)
     }
 
     private const val REMINDER_NOTIFICATION_ID = 41_001

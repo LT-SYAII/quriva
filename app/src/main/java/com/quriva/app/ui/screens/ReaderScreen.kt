@@ -87,6 +87,7 @@ import com.quriva.app.ui.ReaderViewModelFactory
 import com.quriva.app.ui.TafsirSheet
 import com.quriva.app.ui.theme.ArabicFontFamily
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -95,6 +96,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
 import com.quriva.app.ui.parseTajweed
+import com.quriva.app.ui.TajweedRules
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -138,6 +140,7 @@ fun ReaderScreen(
     var tafsirAyah by remember { mutableStateOf<Int?>(null) }
     var noteAyah by remember { mutableStateOf<Int?>(null) }
     var tajweedMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var tajweedRuleId by remember { mutableStateOf<String?>(null) }
     var wordsMap by remember { mutableStateOf<Map<String, List<WordItem>>>(emptyMap()) }
     var translationMap by remember(surahNumber) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var translationLoading by remember(surahNumber) { mutableStateOf(false) }
@@ -338,6 +341,7 @@ fun ReaderScreen(
                     translationMap = translationMap,
                     translationLoading = translationLoading,
                     translationError = translationError,
+                    onTajweedRule = { tajweedRuleId = it },
                     onOpenAudio = {
                         audioSheetTarget = Triple(data.meta.number, data.meta.latinName, data.meta.ayahCount)
                     },
@@ -460,6 +464,11 @@ fun ReaderScreen(
             },
             containerColor = MaterialTheme.colorScheme.surface
         )
+    }
+    tajweedRuleId?.let { id ->
+        val info = TajweedRules.info(id)
+        AlertDialog(onDismissRequest = { tajweedRuleId = null }, title = { Text(info.name) },
+            text = { Text(info.explanation) }, confirmButton = { TextButton(onClick = { tajweedRuleId = null }) { Text("Mengerti") } })
     }
 }
 
@@ -586,6 +595,7 @@ private fun ReaderContent(
     translationMap: Map<String, String>,
     translationLoading: Boolean,
     translationError: String?,
+    onTajweedRule: (String) -> Unit,
     onOpenAudio: () -> Unit,
     onCopy: (Ayah) -> Unit,
     onShare: (Ayah) -> Unit,
@@ -620,6 +630,7 @@ private fun ReaderContent(
                 AyahBlock(
                     ayah = displayedAyah,
                     arabicSize = prefs.arabicSize,
+                    arabicLineSpacing = prefs.arabicLineSpacing,
                     translationSize = prefs.translationSize,
                     showTranslation = prefs.showTranslation,
                     showTajweed = prefs.showTajweed,
@@ -630,6 +641,7 @@ private fun ReaderContent(
                     hasNote = prefs.noteFor(detail.meta.number, ayah.numberInSurah) != null,
                     tajweed = tajweedMap[key],
                     words = wordsMap[key],
+                    onTajweedRule = onTajweedRule,
                     onCopy = { onCopy(displayedAyah) },
                     onShare = { onShare(displayedAyah) },
                     onShareImage = { onShareImage(displayedAyah) },
@@ -875,6 +887,7 @@ private fun MetaChip(label: String) {
 private fun AyahBlock(
     ayah: Ayah,
     arabicSize: Float,
+    arabicLineSpacing: Float,
     translationSize: Float,
     showTranslation: Boolean,
     showTajweed: Boolean,
@@ -885,6 +898,7 @@ private fun AyahBlock(
     hasNote: Boolean,
     tajweed: String?,
     words: List<WordItem>?,
+    onTajweedRule: (String) -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onShareImage: () -> Unit,
@@ -932,19 +946,18 @@ private fun AyahBlock(
             }
         }
         Spacer(Modifier.height(10.dp))
-        SelectionContainer {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                val arabicAnnotated = if (showTajweed && !tajweed.isNullOrBlank()) {
-                    parseTajweed(tajweed, colors.onBackground)
-                } else {
-                    androidx.compose.ui.text.AnnotatedString(ayah.arabic)
-                }
-                Text(
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            val arabicAnnotated = if (showTajweed && !tajweed.isNullOrBlank()) parseTajweed(tajweed, colors.onBackground)
+            else androidx.compose.ui.text.AnnotatedString(ayah.arabic)
+            if (showTajweed && !tajweed.isNullOrBlank()) {
+                ClickableText(
                     text = arabicAnnotated,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                    style = TextStyle(fontFamily = ArabicFontFamily, fontSize = arabicSize.sp, lineHeight = (arabicSize * 1.9f).sp, color = colors.onBackground),
-                    textAlign = TextAlign.Start
+                    style = TextStyle(fontFamily = ArabicFontFamily, fontSize = arabicSize.sp, lineHeight = (arabicSize * arabicLineSpacing).sp, color = colors.onBackground, textAlign = TextAlign.Start),
+                    onClick = { offset -> arabicAnnotated.getStringAnnotations("TAJWEED", offset, offset).firstOrNull()?.let { onTajweedRule(it.item) } }
                 )
+            } else SelectionContainer {
+                Text(text = arabicAnnotated, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), style = TextStyle(fontFamily = ArabicFontFamily, fontSize = arabicSize.sp, lineHeight = (arabicSize * arabicLineSpacing).sp, color = colors.onBackground), textAlign = TextAlign.Start)
             }
         }
         if (showTranslation) {

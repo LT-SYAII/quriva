@@ -1,0 +1,7 @@
+Asmaul Husna data source:
+https://asmaul-husna-api.vercel.app/api/all
+API maintained by Haikel Ilham Hakim (ekel.dev).
+
+The dataset contains the traditional 99 names, Arabic spellings,
+transliterations, and short Indonesian meanings. Quriva bundles a snapshot
+for offline use and displays the source in the content screen.

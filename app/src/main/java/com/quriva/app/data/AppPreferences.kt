@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.quriva.app.model.Bookmark
 import com.quriva.app.model.LastRead
+import com.quriva.app.model.MemorizationEntry
+import com.quriva.app.model.MemorizationStatus
 import com.quriva.app.model.ReadingProgress
 import com.quriva.app.model.VerseNote
 import org.json.JSONArray
@@ -121,6 +123,35 @@ class AppPreferences(context: Context) {
     var updateNotifiedTag by mutableStateOf(prefs.getString(KEY_UPDATE_NOTIFIED, "") ?: "")
         private set
 
+    var highContrast by mutableStateOf(prefs.getBoolean(KEY_HIGH_CONTRAST, false))
+        private set
+    var largeControls by mutableStateOf(prefs.getBoolean(KEY_LARGE_CONTROLS, false))
+        private set
+    var reduceMotion by mutableStateOf(prefs.getBoolean(KEY_REDUCE_MOTION, false))
+        private set
+    var keepScreenOn by mutableStateOf(prefs.getBoolean(KEY_KEEP_SCREEN_ON, false))
+        private set
+    var arabicLineSpacing by mutableFloatStateOf(prefs.getFloat(KEY_ARABIC_LINE_SPACING, 1.9f))
+        private set
+    var audioWifiOnly by mutableStateOf(prefs.getBoolean(KEY_AUDIO_WIFI_ONLY, false))
+        private set
+    var fridayReminderEnabled by mutableStateOf(prefs.getBoolean(KEY_FRIDAY_REMINDER, true))
+        private set
+    var fridayReminderHour by mutableIntStateOf(prefs.getInt(KEY_FRIDAY_HOUR, 6))
+        private set
+    var fridayReminderMinute by mutableIntStateOf(prefs.getInt(KEY_FRIDAY_MINUTE, 0))
+        private set
+    var thursdayNightReminder by mutableStateOf(prefs.getBoolean(KEY_THURSDAY_NIGHT, false))
+        private set
+    var islamicEventNotifications by mutableStateOf(prefs.getBoolean(KEY_EVENT_NOTIFICATIONS, true))
+        private set
+    var hijriAdjustment by mutableIntStateOf(prefs.getInt(KEY_HIJRI_ADJUSTMENT, 0))
+        private set
+    var memorizationEntries by mutableStateOf(readMemorizationEntries())
+        private set
+    var contentFavorites by mutableStateOf(readStringList(KEY_CONTENT_FAVORITES).toSet())
+        private set
+
     fun updateThemeMode(mode: String) {
         themeMode = mode
         prefs.edit().putString(KEY_THEME, mode).apply()
@@ -194,6 +225,68 @@ class AppPreferences(context: Context) {
     fun updateAyahAudioMode(enabled: Boolean) {
         ayahAudioMode = enabled
         prefs.edit().putBoolean(KEY_AYAH_AUDIO_MODE, enabled).apply()
+    }
+
+    fun updateAccessibility(
+        highContrast: Boolean = this.highContrast,
+        largeControls: Boolean = this.largeControls,
+        reduceMotion: Boolean = this.reduceMotion,
+        keepScreenOn: Boolean = this.keepScreenOn,
+        lineSpacing: Float = arabicLineSpacing
+    ) {
+        this.highContrast = highContrast
+        this.largeControls = largeControls
+        this.reduceMotion = reduceMotion
+        this.keepScreenOn = keepScreenOn
+        arabicLineSpacing = lineSpacing.coerceIn(1.5f, 2.5f)
+        prefs.edit()
+            .putBoolean(KEY_HIGH_CONTRAST, highContrast)
+            .putBoolean(KEY_LARGE_CONTROLS, largeControls)
+            .putBoolean(KEY_REDUCE_MOTION, reduceMotion)
+            .putBoolean(KEY_KEEP_SCREEN_ON, keepScreenOn)
+            .putFloat(KEY_ARABIC_LINE_SPACING, arabicLineSpacing)
+            .apply()
+    }
+
+    fun updateAudioWifiOnly(enabled: Boolean) {
+        audioWifiOnly = enabled
+        prefs.edit().putBoolean(KEY_AUDIO_WIFI_ONLY, enabled).apply()
+    }
+
+    fun updateFridayReminder(enabled: Boolean, hour: Int = fridayReminderHour, minute: Int = fridayReminderMinute, thursdayNight: Boolean = thursdayNightReminder) {
+        fridayReminderEnabled = enabled
+        fridayReminderHour = hour.coerceIn(0, 23)
+        fridayReminderMinute = minute.coerceIn(0, 59)
+        thursdayNightReminder = thursdayNight
+        prefs.edit().putBoolean(KEY_FRIDAY_REMINDER, enabled)
+            .putInt(KEY_FRIDAY_HOUR, fridayReminderHour)
+            .putInt(KEY_FRIDAY_MINUTE, fridayReminderMinute).putBoolean(KEY_THURSDAY_NIGHT, thursdayNight).apply()
+    }
+
+    fun updateIslamicEvents(enabled: Boolean, adjustment: Int = hijriAdjustment) {
+        islamicEventNotifications = enabled
+        hijriAdjustment = adjustment.coerceIn(-2, 2)
+        prefs.edit().putBoolean(KEY_EVENT_NOTIFICATIONS, enabled)
+            .putInt(KEY_HIJRI_ADJUSTMENT, hijriAdjustment).apply()
+    }
+
+    fun saveMemorization(entry: MemorizationEntry) {
+        memorizationEntries = (memorizationEntries.filterNot { it.key == entry.key } + entry)
+            .sortedWith(compareBy({ it.surah }, { it.startAyah }))
+        persistMemorizationEntries()
+    }
+
+    fun removeMemorization(key: String) {
+        memorizationEntries = memorizationEntries.filterNot { it.key == key }
+        persistMemorizationEntries()
+    }
+
+    fun toggleContentFavorite(id: String): Boolean {
+        val next = contentFavorites.toMutableSet()
+        val added = if (id in next) { next.remove(id); false } else { next.add(id); true }
+        contentFavorites = next
+        saveStringList(KEY_CONTENT_FAVORITES, next.sorted())
+        return added
     }
 
     fun updateKhatamTarget(days: Int) {
@@ -460,6 +553,39 @@ class AppPreferences(context: Context) {
         persistProgress()
     }
 
+    fun exportUserData(): String {
+        val bookmarkArray = JSONArray().also { arr -> bookmarks.forEach { b -> arr.put(JSONObject()
+            .put("surah", b.surahNumber).put("surahName", b.surahName).put("ayah", b.ayahNumber)
+            .put("arabic", b.arabic).put("translation", b.translation).put("createdAt", b.createdAt)
+            .put("folder", b.folder).put("tags", JSONArray(b.tags))) } }
+        val noteArray = JSONArray().also { arr -> notes.forEach { n -> arr.put(JSONObject()
+            .put("surah", n.surahNumber).put("ayah", n.ayahNumber).put("surahName", n.surahName)
+            .put("text", n.text).put("updatedAt", n.updatedAt)) } }
+        val memArray = JSONArray().also { arr -> memorizationEntries.forEach { e -> arr.put(JSONObject()
+            .put("surah", e.surah).put("name", e.surahName).put("start", e.startAyah).put("end", e.endAyah)
+            .put("status", e.status.name).put("reviewAt", e.reviewAt).put("updatedAt", e.updatedAt)) } }
+        return JSONObject().put("app", "Quriva").put("format", 1).put("bookmarks", bookmarkArray)
+            .put("notes", noteArray).put("memorization", memArray).toString(2)
+    }
+
+    fun importUserData(raw: String): Boolean = try {
+        val root = JSONObject(raw)
+        val bs = root.optJSONArray("bookmarks") ?: JSONArray()
+        bookmarks = buildList(bs.length()) { for (i in 0 until bs.length()) { val o = bs.getJSONObject(i); add(Bookmark(
+            o.getInt("surah"), o.optString("surahName"), o.getInt("ayah"), o.optString("arabic"),
+            o.optString("translation"), o.optLong("createdAt", System.currentTimeMillis()), o.optString("folder"),
+            o.optJSONArray("tags")?.let { a -> List(a.length()) { a.optString(it) } } ?: emptyList())) } }
+        val ns = root.optJSONArray("notes") ?: JSONArray()
+        notes = buildList(ns.length()) { for (i in 0 until ns.length()) { val o = ns.getJSONObject(i); add(VerseNote(
+            o.getInt("surah"), o.getInt("ayah"), o.optString("surahName"), o.optString("text"), o.optLong("updatedAt"))) } }
+        val ms = root.optJSONArray("memorization") ?: JSONArray()
+        memorizationEntries = buildList(ms.length()) { for (i in 0 until ms.length()) { val o = ms.getJSONObject(i); add(MemorizationEntry(
+            o.getInt("surah"), o.optString("name"), o.getInt("start"), o.getInt("end"),
+            runCatching { MemorizationStatus.valueOf(o.optString("status")) }.getOrDefault(MemorizationStatus.NEW),
+            o.optLong("reviewAt"), o.optLong("updatedAt"))) } }
+        persistBookmarks(); persistNotes(); persistMemorizationEntries(); true
+    } catch (_: Throwable) { false }
+
     private fun persistBookmarks() {
         val array = JSONArray()
         bookmarks.forEach { bookmark ->
@@ -618,6 +744,31 @@ class AppPreferences(context: Context) {
         )
     }
 
+    private fun persistMemorizationEntries() {
+        val arr = JSONArray()
+        memorizationEntries.forEach { e ->
+            arr.put(JSONObject().put("surah", e.surah).put("name", e.surahName)
+                .put("start", e.startAyah).put("end", e.endAyah).put("status", e.status.name)
+                .put("reviewAt", e.reviewAt).put("updatedAt", e.updatedAt))
+        }
+        prefs.edit().putString(KEY_MEMORIZATION, arr.toString()).apply()
+    }
+
+    private fun readMemorizationEntries(): List<MemorizationEntry> {
+        val raw = prefs.getString(KEY_MEMORIZATION, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            buildList(arr.length()) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    add(MemorizationEntry(o.getInt("surah"), o.optString("name"), o.getInt("start"), o.getInt("end"),
+                        runCatching { MemorizationStatus.valueOf(o.optString("status")) }.getOrDefault(MemorizationStatus.NEW),
+                        o.optLong("reviewAt"), o.optLong("updatedAt")))
+                }
+            }
+        } catch (_: Throwable) { emptyList() }
+    }
+
     private fun saveStringList(key: String, values: List<String>) {
         prefs.edit().putString(key, JSONArray(values).toString()).apply()
     }
@@ -673,6 +824,20 @@ class AppPreferences(context: Context) {
         const val KEY_LAST_UPDATE_CHECK = "last_update_check_ms"
         const val KEY_DISMISSED_UPDATE = "dismissed_update_tag"
         const val KEY_UPDATE_NOTIFIED = "update_notified_tag"
+        const val KEY_HIGH_CONTRAST = "access_high_contrast"
+        const val KEY_LARGE_CONTROLS = "access_large_controls"
+        const val KEY_REDUCE_MOTION = "access_reduce_motion"
+        const val KEY_KEEP_SCREEN_ON = "access_keep_screen_on"
+        const val KEY_ARABIC_LINE_SPACING = "access_arabic_line_spacing"
+        const val KEY_AUDIO_WIFI_ONLY = "audio_wifi_only"
+        const val KEY_FRIDAY_REMINDER = "friday_reminder_enabled"
+        const val KEY_FRIDAY_HOUR = "friday_reminder_hour"
+        const val KEY_FRIDAY_MINUTE = "friday_reminder_minute"
+        const val KEY_THURSDAY_NIGHT = "thursday_night_reminder"
+        const val KEY_EVENT_NOTIFICATIONS = "islamic_event_notifications"
+        const val KEY_HIJRI_ADJUSTMENT = "hijri_adjustment"
+        const val KEY_MEMORIZATION = "memorization_entries"
+        const val KEY_CONTENT_FAVORITES = "content_favorites"
         const val MAX_BOOKMARKS = 1000
         const val MAX_NOTES = 1000
     }

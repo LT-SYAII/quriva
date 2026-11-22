@@ -111,6 +111,13 @@ fun HomeScreen(
     onOpenProgress: () -> Unit,
     onOpenNotes: () -> Unit,
     onOpenPages: () -> Unit,
+    onOpenMemorization: () -> Unit,
+    onOpenContent: () -> Unit,
+    onOpenNavigation: () -> Unit,
+    onOpenTajweed: () -> Unit,
+    onOpenAudioDownloads: () -> Unit,
+    onOpenCalendar: () -> Unit,
+    onOpenFriday: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -221,6 +228,13 @@ fun HomeScreen(
                                 onOpenProgress = onOpenProgress,
                                 onOpenNotes = onOpenNotes,
                                 onOpenPages = onOpenPages,
+                                onOpenMemorization = onOpenMemorization,
+                                onOpenContent = onOpenContent,
+                                onOpenNavigation = onOpenNavigation,
+                                onOpenTajweed = onOpenTajweed,
+                                onOpenAudioDownloads = onOpenAudioDownloads,
+                                onOpenCalendar = onOpenCalendar,
+                                onOpenFriday = onOpenFriday,
                                 onOpenAyahOfDay = {
                                     ayahOfDay?.let { onOpenSurah(it.surahNumber, it.ayahNumber) }
                                 }
@@ -488,6 +502,13 @@ private fun ExploreSection(
     onOpenProgress: () -> Unit,
     onOpenNotes: () -> Unit,
     onOpenPages: () -> Unit,
+    onOpenMemorization: () -> Unit,
+    onOpenContent: () -> Unit,
+    onOpenNavigation: () -> Unit,
+    onOpenTajweed: () -> Unit,
+    onOpenAudioDownloads: () -> Unit,
+    onOpenCalendar: () -> Unit,
+    onOpenFriday: () -> Unit,
     onOpenAyahOfDay: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -508,7 +529,20 @@ private fun ExploreSection(
             IconOnlyTile(icon = R.drawable.ic_book_open, description = "Daily Streak", onClick = onOpenProgress, modifier = Modifier.weight(1f))
             IconOnlyTile(icon = R.drawable.ic_copy, description = "Catatan pribadi", onClick = onOpenNotes, modifier = Modifier.weight(1f))
             IconOnlyTile(icon = R.drawable.ic_layers, description = "Halaman mushaf", onClick = onOpenPages, modifier = Modifier.weight(1f))
-            Spacer(Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_headphones, description = "Audio offline", onClick = onOpenAudioDownloads, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Hafalan dan murajaah", onClick = onOpenMemorization, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_layers, description = "Navigasi lengkap", onClick = onOpenNavigation, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_tune, description = "Belajar tajwid", onClick = onOpenTajweed, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_bookmark, description = "Koleksi Islami", onClick = onOpenContent, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconOnlyTile(icon = R.drawable.ic_schedule, description = "Kalender Islam", onClick = onOpenCalendar, modifier = Modifier.weight(1f))
+            IconOnlyTile(icon = R.drawable.ic_stat_quriva, description = "Hari Jumat", onClick = onOpenFriday, modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
         }
     }
 }

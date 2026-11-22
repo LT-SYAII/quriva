@@ -523,7 +523,7 @@ private suspend fun downloadSurahAudio(
                     connectTimeout = 15_000
                     readTimeout = 45_000
                     instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "Quriva/1.5.2 (Android)")
+                    setRequestProperty("User-Agent", "Quriva/2.0.0 (Android)")
                 }
                 try {
                     val code = conn.responseCode

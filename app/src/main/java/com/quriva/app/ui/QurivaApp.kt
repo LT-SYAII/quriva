@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,6 +45,13 @@ import com.quriva.app.ui.screens.PagesScreen
 import com.quriva.app.ui.screens.ProgressScreen
 import com.quriva.app.ui.screens.ReaderScreen
 import com.quriva.app.ui.screens.SearchScreen
+import com.quriva.app.ui.screens.MemorizationScreen
+import com.quriva.app.ui.screens.IslamicContentScreen
+import com.quriva.app.ui.screens.QuranNavigationScreen
+import com.quriva.app.ui.screens.TajweedGuideScreen
+import com.quriva.app.ui.screens.AudioDownloadsScreen
+import com.quriva.app.ui.screens.IslamicCalendarScreen
+import com.quriva.app.ui.screens.FridayScreen
 import com.quriva.app.ui.theme.QurivaTheme
 
 @Composable
@@ -112,19 +120,21 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = !darkTheme
             controller.isAppearanceLightNavigationBars = !darkTheme
+            view.keepScreenOn = prefs.keepScreenOn
         }
     }
 
-    QurivaTheme(darkTheme = darkTheme) {
+    QurivaTheme(darkTheme = darkTheme, highContrast = prefs.highContrast, largeText = prefs.largeControls) {
+      CompositionLocalProvider(LocalReduceMotion provides prefs.reduceMotion) {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         val navController = rememberNavController()
 
-        val enter: EnterTransition = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+        val enter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
             scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
-        val exit: ExitTransition = fadeOut(tween(180, easing = FastOutSlowInEasing))
-        val popEnter: EnterTransition = fadeIn(tween(200, easing = FastOutSlowInEasing)) +
+        val exit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(180, easing = FastOutSlowInEasing))
+        val popEnter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(200, easing = FastOutSlowInEasing)) +
             scaleIn(initialScale = 0.992f, animationSpec = tween(200, easing = FastOutSlowInEasing))
-        val popExit: ExitTransition = fadeOut(tween(160, easing = FastOutSlowInEasing)) +
+        val popExit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) +
             scaleOut(targetScale = 0.985f, animationSpec = tween(160, easing = FastOutSlowInEasing))
 
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -148,6 +158,13 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
                         onOpenProgress = { navController.navigate("progress") },
                         onOpenNotes = { navController.navigate("notes") },
                         onOpenPages = { navController.navigate("pages") },
+                        onOpenMemorization = { navController.navigate("memorization") },
+                        onOpenContent = { navController.navigate("islamic-content") },
+                        onOpenNavigation = { navController.navigate("quran-navigation") },
+                        onOpenTajweed = { navController.navigate("tajweed-guide") },
+                        onOpenAudioDownloads = { navController.navigate("audio-downloads") },
+                        onOpenCalendar = { navController.navigate("islamic-calendar") },
+                        onOpenFriday = { navController.navigate("friday") },
                         onOpenSettings = { showSettings = true }
                     )
                 }
@@ -197,6 +214,17 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
                         onOpenPage = { page -> navController.navigate("page/$page") }
                     )
                 }
+                composable("memorization") { MemorizationScreen(prefs, audioPlayer) { navController.popBackStack() } }
+                composable("islamic-content") { IslamicContentScreen(prefs) { navController.popBackStack() } }
+                composable("quran-navigation") { QuranNavigationScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenAyah = { s, a -> navController.navigate("reader/$s?ayah=$a") },
+                    onOpenPages = { navController.navigate("pages") }
+                ) }
+                composable("tajweed-guide") { TajweedGuideScreen { navController.popBackStack() } }
+                composable("audio-downloads") { AudioDownloadsScreen(prefs) { navController.popBackStack() } }
+                composable("islamic-calendar") { IslamicCalendarScreen(prefs) { navController.popBackStack() } }
+                composable("friday") { FridayScreen(prefs, { navController.popBackStack() }, { navController.navigate("reader/18?ayah=1") }) }
                 composable(
                     route = "page/{page}",
                     arguments = listOf(navArgument("page") { type = NavType.IntType })
@@ -257,5 +285,6 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
                 onOpenRelease = { UpdateRepository.openUrl(context, update.htmlUrl) }
             )
         }
+      }
     }
 }
