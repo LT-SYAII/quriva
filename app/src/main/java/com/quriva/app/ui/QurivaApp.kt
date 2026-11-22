@@ -7,8 +7,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -129,13 +129,14 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         val navController = rememberNavController()
 
-        val enter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-            scaleIn(initialScale = 0.985f, animationSpec = tween(220, easing = FastOutSlowInEasing))
-        val exit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(180, easing = FastOutSlowInEasing))
-        val popEnter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(200, easing = FastOutSlowInEasing)) +
-            scaleIn(initialScale = 0.992f, animationSpec = tween(200, easing = FastOutSlowInEasing))
-        val popExit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) +
-            scaleOut(targetScale = 0.985f, animationSpec = tween(160, easing = FastOutSlowInEasing))
+        val enter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(200, easing = FastOutSlowInEasing)) +
+            slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { it / 12 }
+        val exit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(140, easing = FastOutSlowInEasing)) +
+            slideOutHorizontally(animationSpec = tween(220, easing = FastOutSlowInEasing)) { -it / 22 }
+        val popEnter: EnterTransition = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(190, easing = FastOutSlowInEasing)) +
+            slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { -it / 12 }
+        val popExit: ExitTransition = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+            slideOutHorizontally(animationSpec = tween(220, easing = FastOutSlowInEasing)) { it / 22 }
 
         Surface(modifier = Modifier.fillMaxSize()) {
             NavHost(

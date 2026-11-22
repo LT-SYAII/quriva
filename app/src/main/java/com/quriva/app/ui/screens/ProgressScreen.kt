@@ -74,27 +74,21 @@ fun ProgressScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
         Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(painter = painterResource(R.drawable.ic_back), contentDescription = "Kembali", tint = colors.onBackground, modifier = Modifier.size(22.dp))
+            FeatureTopBar(
+                title = "Aktivitas Tilawah",
+                subtitle = "Perjalanan baca dan dengarmu",
+                onBack = onBack,
+                actions = {
+                    Surface(shape = CircleShape, color = colors.surfaceVariant, border = BorderStroke(1.dp, colors.outlineVariant)) {
+                        Text(
+                            "🔥 ${stats.streakDays}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onBackground
+                        )
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Daily Streak", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                    Text("Perjalanan tilawahmu", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-                Surface(shape = CircleShape, color = colors.surfaceVariant, border = BorderStroke(1.dp, colors.outlineVariant)) {
-                    Text(
-                        "🔥 ${stats.streakDays}",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onBackground
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-            }
+            )
 
             Column(
                 modifier = Modifier

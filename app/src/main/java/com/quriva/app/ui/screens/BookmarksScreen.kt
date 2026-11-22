@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -82,45 +83,23 @@ fun BookmarksScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_back),
-                        contentDescription = "Kembali",
-                        tint = colors.onBackground,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Bookmark",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.onBackground
-                    )
-                    Text(
-                        text = if (bookmarks.isEmpty()) "Belum ada ayat tersimpan" else "${bookmarks.size} ayat tersimpan",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-                if (bookmarks.isNotEmpty()) {
-                    IconButton(onClick = { showClearDialog = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_delete),
-                            contentDescription = "Hapus semua bookmark",
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
+            FeatureTopBar(
+                title = "Bookmark",
+                subtitle = if (bookmarks.isEmpty()) "Belum ada ayat tersimpan" else "${bookmarks.size} ayat tersimpan",
+                onBack = onBack,
+                actions = {
+                    if (bookmarks.isNotEmpty()) {
+                        IconButton(onClick = { showClearDialog = true }, modifier = Modifier.size(48.dp)) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = "Hapus semua bookmark",
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
                     }
                 }
-            }
+            )
 
             if (bookmarks.isNotEmpty()) {
                 OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("Cari bookmark atau tag") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp))
@@ -207,28 +186,43 @@ private fun BookmarkRow(
     onEdit: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .interactiveClickable(onClick = onClick)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(21.dp),
+        color = colors.surfaceVariant,
+        border = BorderStroke(1.dp, colors.outlineVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 12.dp, top = 14.dp, bottom = 18.dp)
+                .padding(start = 16.dp, end = 7.dp, top = 13.dp, bottom = 16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = colors.background,
+                    border = BorderStroke(1.dp, colors.outlineVariant)
+                ) {
+                    Text(
+                        text = "${bookmark.surahNumber}:${bookmark.ayahNumber}",
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(9.dp))
                 Text(
-                    text = "${bookmark.surahName} · ${bookmark.surahNumber}:${bookmark.ayahNumber}",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = bookmark.surahName,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.onBackground,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onEdit, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
                     Icon(painterResource(R.drawable.ic_tune), "Atur folder dan tag", Modifier.size(17.dp))
                 }
-                IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
                     Icon(
                         painter = painterResource(R.drawable.ic_bookmark_filled),
                         contentDescription = "Hapus bookmark",
@@ -237,13 +231,13 @@ private fun BookmarkRow(
                     )
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 Text(
                     text = bookmark.arabic,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(end = 12.dp),
+                        .padding(end = 9.dp),
                     fontFamily = ArabicFontFamily,
                     fontSize = 23.sp,
                     lineHeight = 38.sp,
@@ -255,22 +249,23 @@ private fun BookmarkRow(
             }
             Spacer(Modifier.height(7.dp))
             if (bookmark.folder.isNotBlank() || bookmark.tags.isNotEmpty()) {
-                Text((listOfNotNull(bookmark.folder.takeIf { it.isNotBlank() }) + bookmark.tags).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = colors.onBackground)
+                Text(
+                    (listOfNotNull(bookmark.folder.takeIf { it.isNotBlank() }) + bookmark.tags).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onBackground
+                )
                 Spacer(Modifier.height(4.dp))
             }
             Text(
                 text = bookmark.translation,
-                modifier = Modifier.padding(end = 12.dp),
+                modifier = Modifier.padding(end = 9.dp),
                 style = MaterialTheme.typography.bodySmall.copy(lineHeight = 20.sp),
                 color = colors.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        HorizontalDivider(
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp),
-            color = colors.outlineVariant
-        )
     }
 }
 

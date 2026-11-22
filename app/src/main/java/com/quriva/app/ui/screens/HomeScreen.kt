@@ -12,15 +12,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,11 +27,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +48,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,9 +71,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -86,20 +86,51 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.DailyContent
+import com.quriva.app.data.IslamicCalendar
 import com.quriva.app.model.LastRead
 import com.quriva.app.model.SearchResult
 import com.quriva.app.model.SurahMeta
 import com.quriva.app.ui.HomeUiState
 import com.quriva.app.ui.HomeViewModel
 import com.quriva.app.ui.HomeViewModelFactory
+import com.quriva.app.ui.LocalReduceMotion
 import com.quriva.app.ui.ProgressViewModel
+import com.quriva.app.ui.StreakStats
 import com.quriva.app.ui.theme.ArabicFontFamily
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import kotlin.math.roundToInt
 
 private enum class SurahFilter(val label: String) {
     ALL("Semua"),
     MAKKIYAH("Makkiyah"),
     MADANIYAH("Madaniyah")
 }
+
+private class HomeActions(
+    val openSearch: () -> Unit,
+    val openBookmarks: () -> Unit,
+    val openJuz: () -> Unit,
+    val openProgress: () -> Unit,
+    val openNotes: () -> Unit,
+    val openPages: () -> Unit,
+    val openMemorization: () -> Unit,
+    val openContent: () -> Unit,
+    val openNavigation: () -> Unit,
+    val openTajweed: () -> Unit,
+    val openAudioDownloads: () -> Unit,
+    val openCalendar: () -> Unit,
+    val openFriday: () -> Unit,
+    val openSettings: () -> Unit
+)
+
+private class HomeMenuEntry(
+    val title: String,
+    val subtitle: String,
+    val icon: Int,
+    val onClick: () -> Unit
+)
 
 @Composable
 fun HomeScreen(
@@ -134,6 +165,35 @@ fun HomeScreen(
     val allSurahs = success?.surahs.orEmpty()
     var ayahOfDay by remember { mutableStateOf<SearchResult?>(null) }
 
+    val actions = HomeActions(
+        openSearch = onOpenSearch,
+        openBookmarks = onOpenBookmarks,
+        openJuz = onOpenJuz,
+        openProgress = onOpenProgress,
+        openNotes = onOpenNotes,
+        openPages = onOpenPages,
+        openMemorization = onOpenMemorization,
+        openContent = onOpenContent,
+        openNavigation = onOpenNavigation,
+        openTajweed = onOpenTajweed,
+        openAudioDownloads = onOpenAudioDownloads,
+        openCalendar = onOpenCalendar,
+        openFriday = onOpenFriday,
+        openSettings = onOpenSettings
+    )
+
+    val hijriLabel = remember(prefs.hijriAdjustment) {
+        IslamicCalendar.hijriLabel(IslamicCalendar.today(prefs.hijriAdjustment))
+    }
+    val greeting = remember {
+        when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+            in 4..10 -> "Selamat pagi"
+            in 11..14 -> "Selamat siang"
+            in 15..17 -> "Selamat sore"
+            else -> "Selamat malam"
+        }
+    }
+
     LaunchedEffect(Unit) {
         prefs.evaluateSkipMessage()
     }
@@ -162,152 +222,342 @@ fun HomeScreen(
 
     val streak = ProgressViewModel.compute(prefs)
     val skipMessage = if (prefs.skipMessageDate.isNotBlank()) prefs.skipMessageText else ""
+    val resumeSurah = prefs.lastRead?.surahNumber ?: 1
+    val resumeArabicName = allSurahs.firstOrNull { it.number == resumeSurah }?.nameArabic.orEmpty()
+    val dueReviews = prefs.memorizationEntries.count { it.reviewAt <= System.currentTimeMillis() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing),
-                state = listState,
-                contentPadding = PaddingValues(bottom = 32.dp)
-            ) {
-                item(key = "header") {
-                    HomeHeader(
-                        onOpenSearch = onOpenSearch,
-                        onOpenBookmarks = onOpenBookmarks,
-                        onOpenSettings = onOpenSettings
-                    )
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 36.dp)
+        ) {
+            item(key = "header") {
+                HomeHeader(
+                    greeting = greeting,
+                    hijriLabel = hijriLabel,
+                    hasDueReview = dueReviews > 0,
+                    actions = actions
+                )
+            }
+
+            when (val uiState = state) {
+                is HomeUiState.Loading -> {
+                    item(key = "search_skeleton") { SearchSkeleton() }
+                    items(count = 8, key = { "sk_$it" }) { SkeletonSurahRow() }
                 }
 
-                when (val uiState = state) {
-                    is HomeUiState.Loading -> {
-                        item(key = "search_skeleton") { SearchSkeleton() }
-                        items(count = 8, key = { "sk_$it" }) { SkeletonSurahRow() }
-                    }
-
-                    is HomeUiState.Error -> {
-                        item(key = "error") {
-                            ErrorState(
-                                message = uiState.message,
-                                onRetry = viewModel::load
-                            )
-                        }
-                    }
-
-                    is HomeUiState.Success -> {
-                        item(key = "skip") {
-                            AnimatedVisibility(
-                                visible = skipMessage.isNotBlank(),
-                                enter = fadeIn(tween(220)) + expandVertically(),
-                                exit = fadeOut(tween(180)) + shrinkVertically()
-                            ) {
-                                SkipMessageCard(
-                                    message = skipMessage,
-                                    onDismiss = { prefs.dismissSkipMessage() }
-                                )
-                            }
-                        }
-                        item(key = "continue") {
-                            ContinueReadingCard(lastRead = prefs.lastRead, onOpen = onOpenSurah)
-                        }
-                        item(key = "streak") {
-                            StreakSummaryCard(
-                                streakDays = streak.streakDays,
-                                todayRead = streak.todayRead,
-                                todayPlay = streak.todayPlay,
-                                weekTotal = streak.weekRead + streak.weekPlay,
-                                activeDays30 = streak.activeDays30,
-                                onOpen = onOpenProgress
-                            )
-                        }
-                        item(key = "explore") {
-                            ExploreSection(
-                                onOpenSearch = onOpenSearch,
-                                onOpenBookmarks = onOpenBookmarks,
-                                onOpenJuz = onOpenJuz,
-                                onOpenProgress = onOpenProgress,
-                                onOpenNotes = onOpenNotes,
-                                onOpenPages = onOpenPages,
-                                onOpenMemorization = onOpenMemorization,
-                                onOpenContent = onOpenContent,
-                                onOpenNavigation = onOpenNavigation,
-                                onOpenTajweed = onOpenTajweed,
-                                onOpenAudioDownloads = onOpenAudioDownloads,
-                                onOpenCalendar = onOpenCalendar,
-                                onOpenFriday = onOpenFriday,
-                                onOpenAyahOfDay = {
-                                    ayahOfDay?.let { onOpenSurah(it.surahNumber, it.ayahNumber) }
-                                }
-                            )
-                        }
-                        item(key = "search_filters") {
-                            SearchAndFilters(
-                                query = query,
-                                onQueryChange = { query = it },
-                                filter = filter,
-                                onFilterChange = { filterKey = it.name }
-                            )
-                        }
-                        item(key = "section_header") {
-                            SectionHeader(count = visibleSurahs.size)
-                        }
-                        items(items = visibleSurahs, key = { it.number }, contentType = { "surah" }) { surah ->
-                            Box(modifier = Modifier.animateItem()) {
-                                SurahRow(surah = surah, onClick = { onOpenSurah(surah.number, 1) })
-                            }
-                        }
-                        if (visibleSurahs.isEmpty()) {
-                            item(key = "empty") { EmptyState(query) }
-                        }
+                is HomeUiState.Error -> {
+                    item(key = "error") {
+                        ErrorState(
+                            message = uiState.message,
+                            onRetry = viewModel::load
+                        )
                     }
                 }
+
+                is HomeUiState.Success -> {
+                    item(key = "skip") {
+                        AnimatedVisibility(
+                            visible = skipMessage.isNotBlank(),
+                            enter = fadeIn(tween(220)) + expandVertically(),
+                            exit = fadeOut(tween(180)) + shrinkVertically()
+                        ) {
+                            SkipMessageCard(
+                                message = skipMessage,
+                                onDismiss = { prefs.dismissSkipMessage() }
+                            )
+                        }
+                    }
+                    item(key = "continue") {
+                        ContinueReadingCard(
+                            lastRead = prefs.lastRead,
+                            arabicName = resumeArabicName,
+                            onOpen = onOpenSurah
+                        )
+                    }
+                    val ayat = ayahOfDay
+                    if (ayat != null) {
+                        item(key = "ayah_of_day") {
+                            AyatOfDayCard(ayat, onOpen = { onOpenSurah(ayat.surahNumber, ayat.ayahNumber) })
+                        }
+                    }
+                    item(key = "rhythm") {
+                        TodayRhythmCard(stats = streak, onOpen = onOpenProgress)
+                    }
+                    item(key = "search_filters") {
+                        SearchAndFilters(
+                            query = query,
+                            onQueryChange = { query = it },
+                            filter = filter,
+                            onFilterChange = { filterKey = it.name }
+                        )
+                    }
+                    item(key = "section_header") {
+                        SectionHeader(count = visibleSurahs.size)
+                    }
+                    items(items = visibleSurahs, key = { it.number }, contentType = { "surah" }) { surah ->
+                        Box(modifier = Modifier.animateItem()) {
+                            SurahRow(surah = surah, onClick = { onOpenSurah(surah.number, 1) })
+                        }
+                    }
+                    if (visibleSurahs.isEmpty()) {
+                        item(key = "empty") { EmptyState(query) }
+                    }
+                }
+            }
         }
     }
-
 }
 
 @Composable
 private fun HomeHeader(
-    onOpenSearch: () -> Unit,
-    onOpenBookmarks: () -> Unit,
-    onOpenSettings: () -> Unit
+    greeting: String,
+    hijriLabel: String,
+    hasDueReview: Boolean,
+    actions: HomeActions
 ) {
+    val colors = MaterialTheme.colorScheme
+    var menuOpen by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(top = 10.dp, bottom = 20.dp)
+            .padding(horizontal = 22.dp)
+            .padding(top = 12.dp, bottom = 18.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = "QURIVA",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 4.sp,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(colors.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(29.dp)
+                )
+            }
+            Spacer(Modifier.width(11.dp))
+            Column {
+                Text(
+                    text = "QURIVA",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.4.sp,
+                    color = colors.onBackground
+                )
+                Text(
+                    text = "Al-Qur'an & ibadah harian",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onOpenSearch, modifier = Modifier.size(40.dp)) {
-                Icon(painter = painterResource(R.drawable.ic_search), contentDescription = "Cari ayat", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+            IconButton(onClick = actions.openSearch, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_search),
+                    contentDescription = "Cari ayat",
+                    tint = colors.onBackground,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            IconButton(onClick = onOpenBookmarks, modifier = Modifier.size(40.dp)) {
-                Icon(painter = painterResource(R.drawable.ic_bookmark), contentDescription = "Bookmark", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(19.dp))
-            }
-            IconButton(onClick = onOpenSettings, modifier = Modifier.size(40.dp)) {
-                Icon(painter = painterResource(R.drawable.ic_tune), contentDescription = "Pengaturan", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(21.dp))
+            Spacer(Modifier.width(4.dp))
+            Box {
+                Surface(
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = colors.surfaceVariant,
+                    border = BorderStroke(1.dp, colors.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp).fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_menu),
+                            contentDescription = null,
+                            tint = colors.onBackground,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(7.dp))
+                        Text("Menu", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+                        if (hasDueReview) {
+                            Spacer(Modifier.width(7.dp))
+                            Box(Modifier.size(6.dp).background(colors.onBackground, CircleShape))
+                        }
+                    }
+                }
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    modifier = Modifier.width(314.dp).heightIn(max = 548.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    containerColor = colors.surface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 10.dp,
+                    border = BorderStroke(1.dp, colors.outlineVariant)
+                ) {
+                    HomeFeatureMenu(actions = actions, onClose = { menuOpen = false })
+                }
             }
         }
 
-        Spacer(Modifier.height(26.dp))
-        Text("Baca Al-Qur'an\ndengan tenang.", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onBackground)
-        Spacer(Modifier.height(10.dp))
-        Text("Teks Utsmani dan terjemahan Bahasa Indonesia, tersedia offline.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(28.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = greeting.uppercase(Locale.forLanguageTag("id-ID")),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.weight(1f))
+            Surface(
+                shape = CircleShape,
+                color = colors.surfaceVariant,
+                border = BorderStroke(1.dp, colors.outlineVariant)
+            ) {
+                Text(
+                    text = hijriLabel,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).widthIn(max = 164.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Baca dengan tenang.",
+            style = MaterialTheme.typography.displaySmall,
+            color = colors.onBackground
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Satu ayat hari ini, satu langkah lebih dekat.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ColumnScope.HomeFeatureMenu(actions: HomeActions, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 10.dp)
+    ) {
+        Text(
+            text = "Jelajahi Quriva",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "Semua fitur, dikelompokkan agar mudah ditemukan.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    val groups = listOf(
+        "Baca" to listOf(
+            HomeMenuEntry("Juz", "30 juz Al-Qur'an", R.drawable.ic_layers, actions.openJuz),
+            HomeMenuEntry("Halaman mushaf", "604 halaman Al-Qur'an", R.drawable.ic_book_open, actions.openPages),
+            HomeMenuEntry("Navigasi lengkap", "Hizb, rub, manzil, dan sajdah", R.drawable.ic_navigation, actions.openNavigation)
+        ),
+        "Ibadah" to listOf(
+            HomeMenuEntry("Hafalan & murajaah", "Rentang ayat, audio, dan jadwal", R.drawable.ic_book_open, actions.openMemorization),
+            HomeMenuEntry("Koleksi Islami", "Doa, dzikir, asmaul husna, hadis", R.drawable.ic_bookmark, actions.openContent),
+            HomeMenuEntry("Kalender Islam", "Peristiwa dan hitung mundur", R.drawable.ic_schedule, actions.openCalendar),
+            HomeMenuEntry("Hari Jumat", "Al-Kahf dan amalan Jumat", R.drawable.ic_notification, actions.openFriday)
+        ),
+        "Belajar & audio" to listOf(
+            HomeMenuEntry("Audio offline", "Unduh surah atau satu juz", R.drawable.ic_headphones, actions.openAudioDownloads),
+            HomeMenuEntry("Panduan tajwid", "Warna, penjelasan, dan kuis", R.drawable.ic_tune, actions.openTajweed)
+        ),
+        "Simpanan" to listOf(
+            HomeMenuEntry("Bookmark", "Folder, tag, dan pencarian", R.drawable.ic_bookmark, actions.openBookmarks),
+            HomeMenuEntry("Catatan", "Refleksi pribadi per ayat", R.drawable.ic_copy, actions.openNotes),
+            HomeMenuEntry("Aktivitas", "Streak dan ritme tilawah", R.drawable.ic_chart, actions.openProgress)
+        ),
+        "Aplikasi" to listOf(
+            HomeMenuEntry("Pengaturan", "Tampilan, aksesibilitas, dan pengingat", R.drawable.ic_tune, actions.openSettings)
+        )
+    )
+
+    groups.forEachIndexed { index, (title, entries) ->
+        if (index > 0) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 3.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+        }
+        Text(
+            text = title.uppercase(Locale.forLanguageTag("id-ID")),
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 9.dp, bottom = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.1.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        entries.forEach { entry ->
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text(
+                            text = entry.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = entry.subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                onClick = {
+                    onClose()
+                    entry.onClick()
+                },
+                leadingIcon = {
+                    Surface(
+                        modifier = Modifier.size(36.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                painter = painterResource(entry.icon),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                },
+                trailingIcon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_forward),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                contentPadding = PaddingValues(start = 16.dp, end = 14.dp, top = 2.dp, bottom = 2.dp)
+            )
+        }
     }
 }
 
@@ -316,7 +566,12 @@ private fun SkipMessageCard(message: String, onDismiss: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "skipScale")
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        if (!reduceMotion && pressed) 0.985f else 1f,
+        spring(stiffness = Spring.StiffnessMediumLow),
+        label = "skipScale"
+    )
     Surface(
         onClick = onDismiss,
         interactionSource = interaction,
@@ -339,7 +594,11 @@ private fun SkipMessageCard(message: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit) {
+private fun ContinueReadingCard(
+    lastRead: LastRead?,
+    arabicName: String,
+    onOpen: (Int, Int) -> Unit
+) {
     val colors = MaterialTheme.colorScheme
     val surahNumber = lastRead?.surahNumber ?: 1
     val ayah = lastRead?.ayah ?: 1
@@ -349,7 +608,12 @@ private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit)
     val progress by animateFloatAsState(targetValue = targetProgress, animationSpec = tween(700), label = "continueProgress")
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.975f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), label = "continueScale")
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        if (!reduceMotion && pressed) 0.977f else 1f,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "continueScale"
+    )
 
     Card(
         onClick = { onOpen(surahNumber, ayah) },
@@ -363,43 +627,99 @@ private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit)
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher_monochrome),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(colors.inverseOnSurface.copy(alpha = 0.10f)),
-                modifier = Modifier.size(220.dp).align(Alignment.TopEnd).offset(x = 54.dp, y = (-50).dp)
-            )
-            Column(modifier = Modifier.padding(24.dp)) {
+            if (arabicName.isNotBlank()) {
                 Text(
-                    text = if (lastRead == null) "MULAI MEMBACA" else "TERAKHIR DIBACA",
-                    style = MaterialTheme.typography.labelSmall,
-                    letterSpacing = 1.6.sp,
-                    color = colors.inverseOnSurface.copy(alpha = 0.55f)
+                    text = arabicName,
+                    fontFamily = ArabicFontFamily,
+                    fontSize = 68.sp,
+                    lineHeight = 76.sp,
+                    color = colors.inverseOnSurface.copy(alpha = 0.09f),
+                    maxLines = 1,
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-8).dp)
                 )
-                Spacer(Modifier.height(10.dp))
-                Text(text = name, style = MaterialTheme.typography.headlineMedium, color = colors.inverseOnSurface)
+            }
+            Box(
+                modifier = Modifier
+                    .size(190.dp)
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 66.dp, y = 72.dp)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(colors.inverseOnSurface.copy(alpha = 0.12f), Color.Transparent)
+                        ),
+                        CircleShape
+                    )
+            )
+            Column(modifier = Modifier.padding(23.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (lastRead == null) "MULAI MEMBACA" else "TERAKHIR DIBACA",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp,
+                        color = colors.inverseOnSurface.copy(alpha = 0.58f)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Surface(
+                        shape = CircleShape,
+                        color = colors.inverseOnSurface.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "QS $surahNumber",
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.inverseOnSurface.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(13.dp))
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = colors.inverseOnSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (lastRead == null) "$total ayat" else "Ayat $ayah dari $total",
+                    text = if (lastRead == null) "$total ayat · mulai dari awal" else "Ayat $ayah dari $total",
                     style = MaterialTheme.typography.bodySmall,
-                    color = colors.inverseOnSurface.copy(alpha = 0.65f)
+                    color = colors.inverseOnSurface.copy(alpha = 0.64f)
                 )
                 Spacer(Modifier.height(22.dp))
                 LinearProgressIndicator(
                     progress = { progress },
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
                     color = colors.inverseOnSurface,
-                    trackColor = colors.inverseOnSurface.copy(alpha = 0.18f)
+                    trackColor = colors.inverseOnSurface.copy(alpha = 0.17f)
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (lastRead == null) "Bismillah, mulai" else "Lanjutkan membaca",
+                        text = if (lastRead == null) "Bismillah, mulai" else "Lanjutkan tilawah",
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.inverseOnSurface
                     )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = colors.inverseOnSurface, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(9.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .background(colors.inverseOnSurface.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_arrow_forward),
+                            contentDescription = null,
+                            tint = colors.inverseOnSurface,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "${(targetProgress * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.inverseOnSurface.copy(alpha = 0.58f)
+                    )
                 }
             }
         }
@@ -407,24 +727,16 @@ private fun ContinueReadingCard(lastRead: LastRead?, onOpen: (Int, Int) -> Unit)
 }
 
 @Composable
-private fun StreakSummaryCard(
-    streakDays: Int,
-    todayRead: Int,
-    todayPlay: Int,
-    weekTotal: Int,
-    activeDays30: Int,
-    onOpen: () -> Unit
-) {
+private fun AyatOfDayCard(item: SearchResult, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val todayTotal = todayRead + todayPlay
-    val targetRing = (streakDays / 30f).coerceIn(0f, 1f)
-    val ringProgress by animateFloatAsState(targetRing, tween(800), label = "ring")
-    val dailyGoal = 20
-    val targetDaily = (todayTotal / dailyGoal.toFloat()).coerceIn(0f, 1f)
-    val dailyProgress by animateFloatAsState(targetDaily, tween(700), label = "daily")
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.975f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), label = "streakScale")
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        if (!reduceMotion && pressed) 0.985f else 1f,
+        spring(stiffness = Spring.StiffnessMediumLow),
+        label = "ayahScale"
+    )
 
     Surface(
         onClick = onOpen,
@@ -435,140 +747,222 @@ private fun StreakSummaryCard(
             .padding(top = 14.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale },
         shape = RoundedCornerShape(26.dp),
-        color = colors.inverseSurface
+        color = colors.surfaceVariant,
+        border = BorderStroke(1.dp, colors.outlineVariant)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier.size(140.dp).align(Alignment.TopEnd)
-                    .background(Brush.radialGradient(listOf(colors.inverseOnSurface.copy(alpha = 0.12f), Color.Transparent)), CircleShape)
+            Text(
+                text = "”",
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                fontSize = 104.sp,
+                lineHeight = 86.sp,
+                color = colors.onBackground.copy(alpha = 0.06f),
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 14.dp)
             )
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(58.dp)) {
-                        Canvas(modifier = Modifier.size(58.dp)) {
-                            val sw = 6.dp.toPx()
-                            drawArc(color = colors.inverseOnSurface.copy(alpha = 0.18f), startAngle = -220f, sweepAngle = 260f, useCenter = false, style = Stroke(width = sw, cap = StrokeCap.Round))
-                            drawArc(color = colors.inverseOnSurface, startAngle = -220f, sweepAngle = 260f * ringProgress, useCenter = false, style = Stroke(width = sw, cap = StrokeCap.Round))
-                        }
-                        Text("$streakDays", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.inverseOnSurface)
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Daily Streak", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.7f), letterSpacing = 1.sp)
-                        Text(if (streakDays > 0) "$streakDays hari berturut-turut" else "Mulai streak hari ini", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.inverseOnSurface)
-                        Text("30 hari: $activeDays30 aktif · 7 hari: $weekTotal aktivitas", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.65f))
-                    }
-                    Icon(painter = painterResource(R.drawable.ic_arrow_forward), contentDescription = null, tint = colors.inverseOnSurface.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                    Box(Modifier.size(6.dp).background(colors.onBackground, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "AYAT HARI INI",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.35.sp,
+                        color = colors.onSurfaceVariant
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "QS. ${item.surahName} : ${item.ayahNumber}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1
+                    )
                 }
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatPill("Baca", "$todayRead", "ayat", Modifier.weight(1f), colors)
-                    StatPill("Dengar", "$todayPlay", "ayat", Modifier.weight(1f), colors)
-                    StatPill("Hari ini", "$todayTotal", "aktivitas", Modifier.weight(1f), colors)
-                }
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(
-                    progress = { dailyProgress },
-                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                    color = colors.inverseOnSurface,
-                    trackColor = colors.inverseOnSurface.copy(alpha = 0.18f)
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    text = item.arabic,
+                    fontFamily = ArabicFontFamily,
+                    fontSize = 25.sp,
+                    lineHeight = 47.sp,
+                    color = colors.onBackground,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(4.dp))
-                Text("Target harian: $dailyGoal aktivitas", style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(13.dp))
+                Text(
+                    text = item.translation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(17.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Buka ayat", style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_forward),
+                        contentDescription = null,
+                        tint = colors.onBackground,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "Renungan harian",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatPill(label: String, value: String, unit: String, modifier: Modifier = Modifier, colors: androidx.compose.material3.ColorScheme) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = colors.inverseOnSurface.copy(alpha = 0.1f)) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.65f))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.inverseOnSurface)
-                Spacer(Modifier.width(2.dp))
-                Text(unit, style = MaterialTheme.typography.labelSmall, color = colors.inverseOnSurface.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 1.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExploreSection(
-    onOpenSearch: () -> Unit,
-    onOpenBookmarks: () -> Unit,
-    onOpenJuz: () -> Unit,
-    onOpenProgress: () -> Unit,
-    onOpenNotes: () -> Unit,
-    onOpenPages: () -> Unit,
-    onOpenMemorization: () -> Unit,
-    onOpenContent: () -> Unit,
-    onOpenNavigation: () -> Unit,
-    onOpenTajweed: () -> Unit,
-    onOpenAudioDownloads: () -> Unit,
-    onOpenCalendar: () -> Unit,
-    onOpenFriday: () -> Unit,
-    onOpenAyahOfDay: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 26.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Text("Jelajahi", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_search, description = "Cari ayat", onClick = onOpenSearch, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_layers, description = "Daftar juz", onClick = onOpenJuz, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_bookmark, description = "Bookmark", onClick = onOpenBookmarks, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Ayat hari ini", onClick = onOpenAyahOfDay, modifier = Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Daily Streak", onClick = onOpenProgress, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_copy, description = "Catatan pribadi", onClick = onOpenNotes, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_layers, description = "Halaman mushaf", onClick = onOpenPages, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_headphones, description = "Audio offline", onClick = onOpenAudioDownloads, modifier = Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_book_open, description = "Hafalan dan murajaah", onClick = onOpenMemorization, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_layers, description = "Navigasi lengkap", onClick = onOpenNavigation, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_tune, description = "Belajar tajwid", onClick = onOpenTajweed, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_bookmark, description = "Koleksi Islami", onClick = onOpenContent, modifier = Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconOnlyTile(icon = R.drawable.ic_schedule, description = "Kalender Islam", onClick = onOpenCalendar, modifier = Modifier.weight(1f))
-            IconOnlyTile(icon = R.drawable.ic_stat_quriva, description = "Hari Jumat", onClick = onOpenFriday, modifier = Modifier.weight(1f))
-            Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun IconOnlyTile(
-    icon: Int,
-    description: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun TodayRhythmCard(stats: StreakStats, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "tileScale")
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        if (!reduceMotion && pressed) 0.985f else 1f,
+        spring(stiffness = Spring.StiffnessMediumLow),
+        label = "rhythmScale"
+    )
+    var barsVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { barsVisible = true }
+
+    val week = remember(stats.days) { stats.days.takeLast(7) }
+    val maxValue = remember(week) {
+        week.maxOfOrNull { it.readCount + it.playCount }?.coerceAtLeast(1) ?: 1
+    }
+    val labels = remember(week) {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val formatter = SimpleDateFormat("EE", Locale.forLanguageTag("id-ID"))
+        week.map { day ->
+            runCatching { formatter.format(parser.parse(day.date)!!).replace(".", "") }
+                .getOrDefault(day.date.takeLast(2))
+        }
+    }
+    val todayTotal = stats.todayRead + stats.todayPlay
+
     Surface(
-        onClick = onClick,
+        onClick = onOpen,
         interactionSource = interaction,
-        modifier = modifier.height(64.dp).graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = RoundedCornerShape(18.dp),
-        color = colors.surfaceVariant,
-        contentColor = colors.onBackground,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(top = 14.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        shape = RoundedCornerShape(26.dp),
+        color = colors.surface,
         border = BorderStroke(1.dp, colors.outlineVariant)
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Icon(painter = painterResource(icon), contentDescription = description, tint = colors.onBackground, modifier = Modifier.size(22.dp))
+        Column(modifier = Modifier.padding(19.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "RITME TILAWAH",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.35.sp,
+                        color = colors.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (stats.streakDays > 0) "${stats.streakDays} hari berturut-turut" else "Mulai ritme hari ini",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = colors.onBackground
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = colors.onBackground
+                ) {
+                    Text(
+                        text = if (stats.streakDays > 0) "${stats.streakDays}🔥" else "0🔥",
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.background
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                week.forEachIndexed { index, day ->
+                    val total = day.readCount + day.playCount
+                    val fraction = (total.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f)
+                    val target = if (barsVisible) 5f + 32f * fraction else 3f
+                    val barHeight by animateFloatAsState(
+                        targetValue = target,
+                        animationSpec = tween(
+                            durationMillis = if (reduceMotion) 1 else 520,
+                            delayMillis = if (reduceMotion) 0 else index * 35
+                        ),
+                        label = "rhythmBar$index"
+                    )
+                    val isToday = index == week.lastIndex
+                    val barColor = when {
+                        total == 0 -> colors.outlineVariant
+                        isToday -> colors.onBackground
+                        else -> colors.onSurfaceVariant.copy(alpha = 0.5f)
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier.height(39.dp),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .height(barHeight.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(barColor)
+                            )
+                        }
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            text = labels.getOrElse(index) { "" },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isToday) colors.onBackground else colors.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(15.dp))
+            HorizontalDivider(color = colors.outlineVariant)
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (todayTotal == 0) "Belum ada aktivitas hari ini" else "Hari ini $todayTotal aktivitas",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "Rata-rata ${stats.avgDaily7}/hari",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
+                Spacer(Modifier.width(7.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_forward),
+                    contentDescription = null,
+                    tint = colors.onBackground,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
 }
@@ -583,7 +977,7 @@ private fun SearchAndFilters(
     val colors = MaterialTheme.colorScheme
     val focusManager = LocalFocusManager.current
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 24.dp).animateContentSize()) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 26.dp).animateContentSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -598,7 +992,7 @@ private fun SearchAndFilters(
                 }
             },
             singleLine = true,
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(20.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
             colors = OutlinedTextFieldDefaults.colors(
@@ -610,7 +1004,7 @@ private fun SearchAndFilters(
             )
         )
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(13.dp))
         Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SurahFilter.entries.forEach { item ->
                 FilterPill(label = item.label, selected = filter == item, onClick = { onFilterChange(item) })
@@ -624,8 +1018,9 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val reduceMotion = LocalReduceMotion.current
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
+        targetValue = if (!reduceMotion && pressed) 0.95f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "pill"
     )
@@ -645,12 +1040,22 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun SectionHeader(count: Int) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 28.dp, bottom = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 28.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom
     ) {
         Text("Surah", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.weight(1f))
-        Text("$count / 114", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 3.dp))
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Text(
+                text = "$count / 114",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -659,39 +1064,74 @@ private fun SurahRow(surah: SurahMeta, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "row")
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        targetValue = if (!reduceMotion && pressed) 0.985f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "row"
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .animateContentSize()
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.fillMaxSize(), shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, colors.outline)) {}
-                Text(text = surah.number.toString(), style = MaterialTheme.typography.labelLarge, color = colors.onBackground)
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = surah.latinName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = "${surah.translation} · ${surah.ayahCount} ayat",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(text = surah.nameArabic, fontFamily = ArabicFontFamily, fontSize = 23.sp, lineHeight = 31.sp, color = colors.onBackground, textAlign = TextAlign.End)
-                Spacer(Modifier.height(1.dp))
-                Text(text = surah.place, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        Surface(
+            onClick = onClick,
+            interactionSource = interaction,
+            color = Color.Transparent,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(43.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(colors.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = surah.number.toString(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onBackground
+                    )
+                }
+                Spacer(Modifier.width(15.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = surah.latinName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.onBackground
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "${surah.translation} · ${surah.ayahCount} ayat",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = surah.nameArabic,
+                        fontFamily = ArabicFontFamily,
+                        fontSize = 23.sp,
+                        lineHeight = 31.sp,
+                        color = colors.onBackground,
+                        textAlign = TextAlign.End
+                    )
+                    Spacer(Modifier.height(1.dp))
+                    Text(text = surah.place, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
             }
         }
-        HorizontalDivider(modifier = Modifier.padding(start = 84.dp, end = 24.dp), color = colors.outlineVariant)
+        HorizontalDivider(modifier = Modifier.padding(start = 80.dp, end = 22.dp), color = colors.outlineVariant)
     }
 }
 
@@ -700,7 +1140,7 @@ private fun SearchSkeleton() {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 28.dp, bottom = 34.dp).height(56.dp)
-            .clip(RoundedCornerShape(18.dp)).background(colors.surfaceVariant)
+            .clip(RoundedCornerShape(20.dp)).background(colors.surfaceVariant)
     )
 }
 
@@ -708,9 +1148,9 @@ private fun SearchSkeleton() {
 private fun SkeletonSurahRow() {
     val colors = MaterialTheme.colorScheme
     val placeholder = colors.surfaceVariant.copy(alpha = 0.62f)
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(placeholder))
-        Spacer(Modifier.width(16.dp))
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 17.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(43.dp).clip(RoundedCornerShape(14.dp)).background(placeholder))
+        Spacer(Modifier.width(15.dp))
         Column(modifier = Modifier.weight(1f)) {
             Box(modifier = Modifier.width(150.dp).height(14.dp).clip(RoundedCornerShape(6.dp)).background(placeholder))
             Spacer(Modifier.height(8.dp))

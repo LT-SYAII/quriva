@@ -115,23 +115,12 @@ fun PageDetailScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
         Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(painter = painterResource(R.drawable.ic_back), contentDescription = "Kembali", tint = colors.onBackground, modifier = Modifier.size(22.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Halaman $page", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                    val meta = verses.firstOrNull()
-                    Text(
-                        if (meta != null) "Juz ${meta.juz} · Hizb ${meta.hizb} · Manzil ${meta.manzil}" else "Mushaf Madinah",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-            }
+            val pageMeta = verses.firstOrNull()
+            FeatureTopBar(
+                title = "Halaman $page",
+                subtitle = if (pageMeta != null) "Juz ${pageMeta.juz} · Hizb ${pageMeta.hizb} · Manzil ${pageMeta.manzil}" else "Mushaf Madinah",
+                onBack = onBack
+            )
 
             when {
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

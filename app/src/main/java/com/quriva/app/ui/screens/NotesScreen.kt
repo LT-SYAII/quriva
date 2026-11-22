@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -54,18 +55,11 @@ fun NotesScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
         Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(painter = painterResource(R.drawable.ic_back), contentDescription = "Kembali", tint = colors.onBackground, modifier = Modifier.size(22.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Catatan pribadi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                    Text(if (notes.isEmpty()) "Belum ada catatan" else "${notes.size} catatan", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-            }
+            FeatureTopBar(
+                "Catatan pribadi",
+                if (notes.isEmpty()) "Belum ada catatan" else "${notes.size} catatan",
+                onBack
+            )
 
             if (notes.isNotEmpty()) {
                 OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("Cari catatan") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp))
@@ -88,18 +82,32 @@ fun NotesScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
                     itemsIndexed(visible, key = { _, note -> "${note.surahNumber}:${note.ayahNumber}" }) { index, note ->
                         AnimatedListItem(index = index) {
-                            Column(modifier = Modifier.fillMaxWidth().interactiveClickable { onOpenAyah(note.surahNumber, note.ayahNumber) }) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+                            Surface(
+                                onClick = { onOpenAyah(note.surahNumber, note.ayahNumber) },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                                color = colors.surfaceVariant,
+                                border = BorderStroke(1.dp, colors.outlineVariant)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(start = 15.dp, end = 7.dp, top = 12.dp, bottom = 15.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("${note.surahName} · ${note.surahNumber}:${note.ayahNumber}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = { prefs.removeNote(note.surahNumber, note.ayahNumber) }, modifier = Modifier.size(32.dp)) {
-                                            Icon(painter = painterResource(R.drawable.ic_delete), contentDescription = "Hapus catatan", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                        Surface(shape = CircleShape, color = colors.background, border = BorderStroke(1.dp, colors.outlineVariant)) {
+                                            Text(
+                                                "${note.surahNumber}:${note.ayahNumber}",
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(Modifier.width(9.dp))
+                                        Text(note.surahName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, modifier = Modifier.weight(1f))
+                                        IconButton(onClick = { prefs.removeNote(note.surahNumber, note.ayahNumber) }, modifier = Modifier.size(48.dp)) {
+                                            Icon(painter = painterResource(R.drawable.ic_delete), contentDescription = "Hapus catatan", tint = colors.onSurfaceVariant, modifier = Modifier.size(17.dp))
                                         }
                                     }
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(note.text, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                                    Spacer(Modifier.height(5.dp))
+                                    Text(note.text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 4, overflow = TextOverflow.Ellipsis)
                                 }
-                                HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp), color = colors.outlineVariant)
                             }
                         }
                     }

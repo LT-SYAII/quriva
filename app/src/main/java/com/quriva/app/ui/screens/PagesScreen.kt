@@ -42,18 +42,7 @@ fun PagesScreen(
     val pages = (1..604).toList()
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
         Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(painter = painterResource(R.drawable.ic_back), contentDescription = "Kembali", tint = colors.onBackground, modifier = Modifier.size(22.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Halaman Mushaf", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
-                    Text("604 halaman · Madinah", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-            }
+            FeatureTopBar("Halaman Mushaf", "604 halaman · Madinah", onBack)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 72.dp),
                 modifier = Modifier.fillMaxSize(),

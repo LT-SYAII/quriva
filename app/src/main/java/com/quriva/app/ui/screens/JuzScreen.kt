@@ -69,35 +69,7 @@ fun JuzScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_back),
-                        contentDescription = "Kembali",
-                        tint = colors.onBackground,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Juz",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.onBackground
-                    )
-                    Text(
-                        text = "30 bagian Al-Qur'an",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-            }
+            FeatureTopBar("Juz", "30 bagian Al-Qur'an", onBack)
 
             when (val current = state) {
                 is JuzUiState.Loading -> {

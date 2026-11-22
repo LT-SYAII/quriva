@@ -64,7 +64,7 @@ object UpdateDownloader {
             readTimeout = 60_000
             instanceFollowRedirects = true
             setRequestProperty("Accept", "application/octet-stream")
-            setRequestProperty("User-Agent", "Quriva/2.0.0 (Android)")
+            setRequestProperty("User-Agent", "Quriva/2.1.0 (Android)")
         }
 
         try {

@@ -48,7 +48,7 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     out.delete(); verified.delete()
                     val conn = (URL(audio.url).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 15_000; readTimeout = 45_000; instanceFollowRedirects = true
-                        setRequestProperty("User-Agent", "Quriva/2.0.0 (Android)")
+                        setRequestProperty("User-Agent", "Quriva/2.1.0 (Android)")
                     }
                     try {
                         if (conn.responseCode !in 200..299) throw IOException("HTTP ${conn.responseCode}")
@@ -70,15 +70,26 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
     }
 
     companion object {
-        private const val WORK = "quriva_audio_queue"
-        private const val KEY_SURAH = "surah"; private const val KEY_RECITER = "reciter"; private const val KEY_COUNT = "count"; private const val KEY_NAME = "name"
+        const val WORK_NAME = "quriva_audio_queue"
+        const val TAG_PREFIX = "quriva_audio_surah_"
+        const val QUEUE_TAG = "quriva_audio_download"
+        const val KEY_SURAH = "surah"
+        private const val KEY_RECITER = "reciter"
+        private const val KEY_COUNT = "count"
+        private const val KEY_NAME = "name"
 
         fun enqueue(context: Context, surah: Int, name: String, count: Int, reciter: Int, wifiOnly: Boolean) {
             val constraints = Constraints.Builder().setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED).build()
             val request = OneTimeWorkRequestBuilder<AudioDownloadWorker>().setConstraints(constraints)
+                .addTag(QUEUE_TAG)
+                .addTag("$TAG_PREFIX$surah")
                 .setInputData(workDataOf(KEY_SURAH to surah, KEY_NAME to name, KEY_COUNT to count, KEY_RECITER to reciter)).build()
-            WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
-        fun cancelAll(context: Context) = WorkManager.getInstance(context).cancelUniqueWork(WORK)
+        fun cancelAll(context: Context) = WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+
+        fun surahFromTags(tags: Set<String>): Int = tags.firstNotNullOfOrNull { tag ->
+            tag.takeIf { it.startsWith(TAG_PREFIX) }?.removePrefix(TAG_PREFIX)?.toIntOrNull()
+        } ?: 0
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -45,7 +46,7 @@ fun Modifier.interactiveClickable(
         }
         .clickable(
             interactionSource = interaction,
-            indication = null,
+            indication = LocalIndication.current,
             enabled = enabled,
             onClick = onClick
         )

@@ -34,6 +34,7 @@
 | **Lanjutkan Bacaan** | Posisi bacaan terakhir tersimpan otomatis sehingga mudah melanjutkan kapan saja. |
 | **Ayat Hari Ini** | Sajian ayat pilihan setiap hari untuk pengingat dan renungan. |
 | **Navigasi Juz & Halaman** | Jelajahi Al-Qur'an melalui 30 Juz dan tampilan halaman mushaf. |
+| **Beranda Rapi** | Fitur dikelompokkan lewat menu dropdown, kartu interaktif, dan ritme tilawah 7 hari agar beranda tidak penuh tombol. |
 
 ---
 
@@ -131,7 +132,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 2.0.0
+- **Versi:** 2.1.0
 - **Pembuat:** Bang syaii
 
 ---
