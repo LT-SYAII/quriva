@@ -30,6 +30,7 @@ object NotificationCenter {
     const val FRIDAY_CHANNEL_ID = "quriva_friday"
     const val EVENT_CHANNEL_ID = "quriva_islamic_events"
     const val DOWNLOAD_CHANNEL_ID = "quriva_audio_downloads"
+    const val PRAYER_CHANNEL_ID = "quriva_prayer_times"
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -51,7 +52,9 @@ object NotificationCenter {
                 NotificationChannel(EVENT_CHANNEL_ID, "Peristiwa Islam", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = "Countdown dan pengingat peristiwa Islam" },
                 NotificationChannel(DOWNLOAD_CHANNEL_ID, "Unduhan Audio", NotificationManager.IMPORTANCE_LOW)
-                    .apply { description = "Progres unduhan audio offline" }
+                    .apply { description = "Progres unduhan audio offline" },
+                NotificationChannel(PRAYER_CHANNEL_ID, "Jadwal Salat", NotificationManager.IMPORTANCE_HIGH)
+                    .apply { description = "Pengingat waktu salat sesuai jadwal offline" }
             )
         )
     }
@@ -169,6 +172,53 @@ object NotificationCenter {
 
     fun notifyIslamicEvent(context: Context, title: String, text: String, id: Int): Boolean =
         notifySimple(context, EVENT_CHANNEL_ID, 42_000 + (id and 0x7ff), title, text)
+
+    fun notifyPrayer(
+        context: Context,
+        prayer: Prayer,
+        timeLabel: String,
+        cityName: String,
+        minutesBefore: Int
+    ): Boolean {
+        createChannels(context)
+        if (access(context, PRAYER_CHANNEL_ID) != NotificationAccess.GRANTED) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
+        val title = if (minutesBefore > 0) {
+            "${prayer.label} ${minutesBefore} menit lagi"
+        } else {
+            "Waktu ${prayer.label} telah masuk"
+        }
+        val text = if (minutesBefore > 0) {
+            "$cityName · ${prayer.label} pukul $timeLabel. Siapkan waktu untuk salat."
+        } else {
+            "$cityName · ${prayer.label} pukul $timeLabel. Semoga salat kita diterima."
+        }
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context,
+            44_000 + prayer.ordinal,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, PRAYER_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_quriva)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        return runCatching {
+            NotificationManagerCompat.from(context).notify(44_000 + prayer.ordinal, notification)
+            true
+        }.getOrDefault(false)
+    }
 
     fun notifyDownload(context: Context, title: String, progress: Int, done: Boolean = false): Boolean {
         createChannels(context)

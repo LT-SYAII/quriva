@@ -15,9 +15,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.AppUpdateWorker
 import com.quriva.app.data.NotificationCenter
+import com.quriva.app.data.PrayerReminderScheduler
 import com.quriva.app.data.ReminderScheduler
 import com.quriva.app.data.IslamicReminderScheduler
 import com.quriva.app.ui.QurivaApp
+import com.quriva.app.widget.QurivaWidgetProvider
 
 class MainActivity : ComponentActivity() {
     private val updateRequestKey = mutableIntStateOf(0)
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
         }
         preferences = AppPreferences(applicationContext)
         NotificationCenter.createChannels(this)
+        PrayerReminderScheduler.reschedule(this)
         AppUpdateWorker.schedule(this)
         if (preferences.reminderEnabled) {
             ReminderScheduler.ensureScheduled(
@@ -62,6 +65,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppUpdateWorker.runNow(this)
+        QurivaWidgetProvider.updateAll(this)
         requestNotificationPermissionOnce()
         if (firstStart) {
             firstStart = false
@@ -74,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         stoppedAtElapsed = SystemClock.elapsedRealtime()
+        QurivaWidgetProvider.updateAll(this)
         super.onStop()
     }
 

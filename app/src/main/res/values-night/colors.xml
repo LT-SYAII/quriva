@@ -3,4 +3,8 @@
     <color name="splash_bg">#000000</color>
     <color name="window_bg">#000000</color>
     <color name="ic_launcher_background">#000000</color>
+    <color name="widget_surface">#111111</color>
+    <color name="widget_text">#FFFFFF</color>
+    <color name="widget_muted">#AFAFAF</color>
+    <color name="widget_divider">#2E2E2E</color>
 </resources>

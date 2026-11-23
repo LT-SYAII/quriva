@@ -52,6 +52,8 @@ import com.quriva.app.ui.screens.TajweedGuideScreen
 import com.quriva.app.ui.screens.AudioDownloadsScreen
 import com.quriva.app.ui.screens.IslamicCalendarScreen
 import com.quriva.app.ui.screens.FridayScreen
+import com.quriva.app.ui.screens.KhatamScreen
+import com.quriva.app.ui.screens.PrayerScreen
 import com.quriva.app.ui.theme.QurivaTheme
 
 @Composable
@@ -166,6 +168,8 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
                         onOpenAudioDownloads = { navController.navigate("audio-downloads") },
                         onOpenCalendar = { navController.navigate("islamic-calendar") },
                         onOpenFriday = { navController.navigate("friday") },
+                        onOpenPrayer = { navController.navigate("prayer") },
+                        onOpenKhatam = { navController.navigate("khatam") },
                         onOpenSettings = { showSettings = true }
                     )
                 }
@@ -226,6 +230,16 @@ fun QurivaApp(prefs: AppPreferences, updateRequestKey: Int = 0) {
                 composable("audio-downloads") { AudioDownloadsScreen(prefs) { navController.popBackStack() } }
                 composable("islamic-calendar") { IslamicCalendarScreen(prefs) { navController.popBackStack() } }
                 composable("friday") { FridayScreen(prefs, { navController.popBackStack() }, { navController.navigate("reader/18?ayah=1") }) }
+                composable("prayer") { PrayerScreen(prefs) { navController.popBackStack() } }
+                composable("khatam") {
+                    KhatamScreen(
+                        prefs = prefs,
+                        onBack = { navController.popBackStack() },
+                        onOpenReading = { surah, ayah ->
+                            navController.navigate("reader/$surah?ayah=$ayah")
+                        }
+                    )
+                }
                 composable(
                     route = "page/{page}",
                     arguments = listOf(navArgument("page") { type = NavType.IntType })

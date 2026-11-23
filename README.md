@@ -81,6 +81,18 @@
 
 ---
 
+## 🕌 Jadwal Salat, Kiblat & Ibadah Harian
+
+- **Jadwal salat offline** — Subuh, Terbit, Dzuhur, Ashar, Maghrib, dan Isya dihitung dari koordinat 29 kota Indonesia tanpa internet.
+- **Pilihan metode** — Kemenag RI, Muslim World League, ISNA, dan Umm al-Qura, plus opsi Ashar mazhab Hanafi.
+- **Pengingat salat** — notifikasi tepat waktu atau 5–20 menit sebelumnya, dengan pilihan salat yang ingin diingatkan.
+- **Arah kiblat** — kompas berbasis sensor dengan sudut dari utara dan fallback angka derajat.
+- **Pelacak ibadah harian** — checklist lima salat, dzikir pagi/petang, tilawah, dan hafalan yang tersimpan otomatis.
+- **Rencana khatam** — target 30–365 hari, proyeksi ayat/halaman per hari, dan status sesuai jalur.
+- **Widget beranda** — jadwal salat berikutnya, tanggal Hijriah, lanjutan tilawah, dan progres ibadah sekilas.
+
+---
+
 ## 🗓️ Kalender Islam & Jumat
 
 - Countdown peristiwa Islam, Idulfitri, Iduladha, Ramadan, Arafah, Asyura, Isra Mikraj, dan lainnya.
@@ -122,7 +134,7 @@ Bangun kebiasaan baik bersama Quriva:
 ## 🤲 Berbagi Kebaikan
 
 - **Bagikan Ayat** — kirim teks ayat dan terjemahannya kepada keluarga atau teman.
-- **Kartu Ayat** — bagikan ayat dalam bentuk gambar yang indah dan mudah dibaca.
+- **Kartu Ayat** — bagikan ayat dalam empat template monokrom: Klasik, Malam, Arab, dan Minimal.
 
 ---
 
@@ -132,7 +144,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 2.1.0
+- **Versi:** 2.2.0
 - **Pembuat:** Bang syaii
 
 ---

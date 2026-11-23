@@ -29,20 +29,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -102,7 +106,12 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -139,6 +148,7 @@ fun ReaderScreen(
     var audioSheetTarget by remember { mutableStateOf<Triple<Int, String, Int>?>(null) }
     var tafsirAyah by remember { mutableStateOf<Int?>(null) }
     var noteAyah by remember { mutableStateOf<Int?>(null) }
+    var shareImageAyah by remember { mutableStateOf<Ayah?>(null) }
     var tajweedMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var tajweedRuleId by remember { mutableStateOf<String?>(null) }
     var wordsMap by remember { mutableStateOf<Map<String, List<WordItem>>>(emptyMap()) }
@@ -350,7 +360,7 @@ fun ReaderScreen(
                         scope.launch { snackbarHostState.showSnackbar("Ayat disalin ke clipboard") }
                     },
                     onShare = { ayah -> shareAyah(context, data, ayah) },
-                    onShareImage = { ayah -> shareAyahImage(context, data, ayah) },
+                    onShareImage = { ayah -> shareImageAyah = ayah },
                     onTafsir = { ayah -> tafsirAyah = ayah.numberInSurah },
                     onNote = { ayah -> noteAyah = ayah.numberInSurah },
                     onPlayFrom = { ayah ->
@@ -469,6 +479,18 @@ fun ReaderScreen(
         val info = TajweedRules.info(id)
         AlertDialog(onDismissRequest = { tajweedRuleId = null }, title = { Text(info.name) },
             text = { Text(info.explanation) }, confirmButton = { TextButton(onClick = { tajweedRuleId = null }) { Text("Mengerti") } })
+    }
+    val currentShareAyah = shareImageAyah
+    if (currentShareAyah != null && currentDetail != null) {
+        AyahCardTemplateSheet(
+            detail = currentDetail,
+            ayah = currentShareAyah,
+            onDismiss = { shareImageAyah = null },
+            onSelect = { template ->
+                shareAyahImage(context, currentDetail, currentShareAyah, template)
+                shareImageAyah = null
+            }
+        )
     }
 }
 
@@ -1046,30 +1068,143 @@ private fun shareAyah(context: Context, detail: SurahDetail, ayah: Ayah) {
     context.startActivity(Intent.createChooser(intent, "Bagikan ayat"))
 }
 
-private fun shareAyahImage(context: Context, detail: SurahDetail, ayah: Ayah) {
+private enum class AyahCardTemplate(
+    val label: String,
+    val description: String,
+    val darkPreview: Boolean
+) {
+    CLASSIC("Klasik", "Terjemahan dengan judul dan identitas Quriva", false),
+    NIGHT("Malam", "Latar hitam, teks putih, kontras tinggi", true),
+    ARABIC("Arab", "Teks Arab besar disertai terjemahan ringkas", false),
+    MINIMAL("Minimal", "Hanya teks Arab dan referensi ayat", true)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AyahCardTemplateSheet(
+    detail: SurahDetail,
+    ayah: Ayah,
+    onDismiss: () -> Unit,
+    onSelect: (AyahCardTemplate) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.background
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Text(
+                "Kartu ayat",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "Pilih template monokrom untuk dibagikan.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "QS. ${detail.meta.latinName} : ${ayah.numberInSurah}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            AyahCardTemplate.entries.forEach { template ->
+                Surface(
+                    onClick = { onSelect(template) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.outlineVariant)
+                ) {
+                    Row(
+                        Modifier.padding(11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AyahTemplatePreview(template)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                template.label,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                template.description,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_arrow_forward),
+                            contentDescription = null,
+                            tint = colors.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AyahTemplatePreview(template: AyahCardTemplate) {
+    val colors = MaterialTheme.colorScheme
+    val background = if (template.darkPreview) colors.inverseSurface else colors.surfaceVariant
+    val foreground = if (template.darkPreview) colors.inverseOnSurface else colors.onSurface
+    Surface(
+        modifier = Modifier.size(width = 56.dp, height = 48.dp),
+        shape = RoundedCornerShape(11.dp),
+        color = background,
+        border = BorderStroke(1.dp, colors.outlineVariant)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = when (template) {
+                    AyahCardTemplate.ARABIC, AyahCardTemplate.MINIMAL -> "اقرأ"
+                    AyahCardTemplate.NIGHT -> "Aa"
+                    AyahCardTemplate.CLASSIC -> "Aa"
+                },
+                fontFamily = if (template == AyahCardTemplate.ARABIC || template == AyahCardTemplate.MINIMAL) {
+                    ArabicFontFamily
+                } else {
+                    androidx.compose.ui.text.font.FontFamily.Serif
+                },
+                fontSize = if (template == AyahCardTemplate.ARABIC || template == AyahCardTemplate.MINIMAL) 17.sp else 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = foreground
+            )
+        }
+    }
+}
+
+private fun shareAyahImage(
+    context: Context,
+    detail: SurahDetail,
+    ayah: Ayah,
+    template: AyahCardTemplate
+) {
     try {
-        val width = 1080
-        val pad = 72f
-        val title = "${detail.meta.latinName} ${detail.meta.number}:${ayah.numberInSurah}"
-        val body = ayah.translation
-        val footer = "Quriva · ${detail.meta.number}:${ayah.numberInSurah}"
-        val paintBg = Paint().apply { color = android.graphics.Color.WHITE }
-        val paintTitle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.DKGRAY; textSize = 42f }
-        val paintBody = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; textSize = 46f }
-        val paintFooter = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.GRAY; textSize = 34f }
-        val lines = wrapText(body, paintBody, width - pad * 2)
-        val height = (pad + 80 + 40 + lines.size * 64 + 80 + pad).toInt().coerceAtLeast(600)
-        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
-        var y = pad + 50
-        canvas.drawText(title, pad, y, paintTitle)
-        y += 70
-        lines.forEach { line -> canvas.drawText(line, pad, y, paintBody); y += 64 }
-        y += 40
-        canvas.drawText(footer, pad, y.coerceAtMost(height - pad), paintFooter)
+        val bmp = renderAyahCard(context, detail, ayah, template)
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
-        val file = File(dir, "ayah_${detail.meta.number}_${ayah.numberInSurah}.png")
+        val file = File(
+            dir,
+            "ayah_${detail.meta.number}_${ayah.numberInSurah}_${template.name.lowercase()}.png"
+        )
         FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bmp.recycle()
         val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
@@ -1084,22 +1219,200 @@ private fun shareAyahImage(context: Context, detail: SurahDetail, ayah: Ayah) {
     }
 }
 
-private fun wrapText(text: String, paint: Paint, maxWidth: Float): List<String> {
-    val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }
-    if (words.isEmpty()) return listOf("")
-    val lines = mutableListOf<String>()
-    var current = ""
-    for (w in words) {
-        val candidate = if (current.isEmpty()) w else "$current $w"
-        if (paint.measureText(candidate) <= maxWidth) {
-            current = candidate
-        } else {
-            if (current.isNotEmpty()) lines += current
-            current = w
+private fun renderAyahCard(
+    context: Context,
+    detail: SurahDetail,
+    ayah: Ayah,
+    template: AyahCardTemplate
+): Bitmap {
+    val width = 1080
+    val dark = template == AyahCardTemplate.NIGHT || template == AyahCardTemplate.MINIMAL
+    val pad = if (template == AyahCardTemplate.MINIMAL) 96 else 76
+    val contentWidth = width - pad * 2
+    val background = if (dark) 0xFF0B0B0B.toInt() else 0xFFFFFFFF.toInt()
+    val ink = if (dark) 0xFFFFFFFF.toInt() else 0xFF111111.toInt()
+    val muted = if (dark) 0xFFA6A6A6.toInt() else 0xFF6B6B6B.toInt()
+    val rule = if (dark) 0xFF2C2C2C.toInt() else 0xFFE0E0E0.toInt()
+
+    val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = muted
+        textSize = 25f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        letterSpacing = 0.14f
+    }
+    val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ink
+        textSize = 38f
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+    }
+    val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ink
+        textSize = 41f
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    }
+    val arabicPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ink
+        textSize = if (template == AyahCardTemplate.MINIMAL) 62f else 57f
+        typeface = ResourcesCompat.getFont(context, R.font.amiri) ?: Typeface.SERIF
+    }
+    val footerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = muted
+        textSize = 25f
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    }
+
+    val reference = "${detail.meta.latinName} · ${detail.meta.number}:${ayah.numberInSurah}"
+    val footer = "Quriva · quran.com/${detail.meta.number}/${ayah.numberInSurah}"
+    val label = "QURIVA · ${template.label.uppercase()}"
+
+    val titleLayout = buildCardLayout(
+        text = reference,
+        paint = titlePaint,
+        width = contentWidth,
+        align = Layout.Alignment.ALIGN_NORMAL,
+        spacing = 1.1f,
+        maxLines = 1
+    )
+    val bodyLayout = buildCardLayout(
+        text = ayah.translation,
+        paint = bodyPaint,
+        width = contentWidth,
+        align = Layout.Alignment.ALIGN_NORMAL,
+        spacing = 1.32f,
+        maxLines = 22
+    )
+    val audioArabicLayout = buildCardLayout(
+        text = ayah.arabic,
+        paint = arabicPaint,
+        width = contentWidth,
+        align = Layout.Alignment.ALIGN_NORMAL,
+        spacing = 1.42f,
+        maxLines = 24,
+        rtl = true
+    )
+    val arabicBodyLayout = buildCardLayout(
+        text = ayah.translation,
+        paint = TextPaint(bodyPaint).apply { textSize = 35f },
+        width = contentWidth,
+        align = Layout.Alignment.ALIGN_NORMAL,
+        spacing = 1.3f,
+        maxLines = 16
+    )
+
+    var y = pad + 32f
+    val footerSpace = 50f
+    val contentHeight = when (template) {
+        AyahCardTemplate.CLASSIC, AyahCardTemplate.NIGHT ->
+            y + titleLayout.height + 30f + bodyLayout.height + 48f + footerSpace
+        AyahCardTemplate.ARABIC ->
+            y + 30f + audioArabicLayout.height + 34f + 32f + arabicBodyLayout.height + 42f + footerSpace
+        AyahCardTemplate.MINIMAL ->
+            y + audioArabicLayout.height + 64f + 38f + footerSpace
+    }
+    val height = (contentHeight + pad).toInt().coerceIn(620, 4200)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    canvas.drawColor(background)
+
+    if (template == AyahCardTemplate.NIGHT) {
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            color = rule
+        }
+        canvas.drawRoundRect(
+            26f,
+            26f,
+            width - 26f,
+            height - 26f,
+            28f,
+            28f,
+            borderPaint
+        )
+    }
+
+    canvas.drawText(label, pad.toFloat(), y, labelPaint)
+    y += 18f
+
+    when (template) {
+        AyahCardTemplate.CLASSIC, AyahCardTemplate.NIGHT -> {
+            y += 26f
+            canvas.drawLayout(titleLayout, pad.toFloat(), y)
+            y += titleLayout.height + 30f
+            canvas.drawLayout(bodyLayout, pad.toFloat(), y)
+            y += bodyLayout.height + 48f
+        }
+        AyahCardTemplate.ARABIC -> {
+            y += 20f
+            canvas.drawLayout(titleLayout, pad.toFloat(), y)
+            y += titleLayout.height + 30f
+            canvas.drawLayout(audioArabicLayout, pad.toFloat(), y)
+            y += audioArabicLayout.height + 34f
+            canvas.drawLine(
+                pad.toFloat(),
+                y,
+                (width - pad).toFloat(),
+                y,
+                Paint().apply { color = rule; strokeWidth = 1.4f }
+            )
+            y += 32f
+            canvas.drawLayout(arabicBodyLayout, pad.toFloat(), y)
+            y += arabicBodyLayout.height + 42f
+        }
+        AyahCardTemplate.MINIMAL -> {
+            y += 36f
+            canvas.drawLayout(audioArabicLayout, pad.toFloat(), y)
+            y += audioArabicLayout.height + 64f
+            val centered = TextPaint(titlePaint).apply {
+                textSize = 29f
+                color = muted
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+            canvas.drawText(
+                reference,
+                (width - centered.measureText(reference)) / 2f,
+                y,
+                centered
+            )
+            y += 38f
         }
     }
-    if (current.isNotEmpty()) lines += current
-    return lines.take(20)
+
+    val footerWidth = footerPaint.measureText(footer)
+    canvas.drawText(
+        footer,
+        if (template == AyahCardTemplate.MINIMAL) (width - footerWidth) / 2f else pad.toFloat(),
+        y.coerceAtMost(height - pad / 2f),
+        footerPaint
+    )
+
+    return bitmap
+}
+
+private fun buildCardLayout(
+    text: String,
+    paint: TextPaint,
+    width: Int,
+    align: Layout.Alignment,
+    spacing: Float,
+    maxLines: Int,
+    rtl: Boolean = false
+): StaticLayout {
+    val builder = StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
+        .setAlignment(align)
+        .setIncludePad(false)
+        .setLineSpacing(0f, spacing)
+        .setMaxLines(maxLines)
+        .setEllipsize(TextUtils.TruncateAt.END)
+    if (rtl) builder.setTextDirection(android.text.TextDirectionHeuristics.RTL)
+    return builder.build()
+}
+
+private fun Canvas.drawLayout(layout: StaticLayout, x: Float, y: Float) {
+    save()
+    translate(x, y)
+    layout.draw(this)
+    restore()
 }
 
 private fun buildAyahText(detail: SurahDetail, ayah: Ayah): String =

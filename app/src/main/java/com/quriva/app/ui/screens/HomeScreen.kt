@@ -87,6 +87,11 @@ import com.quriva.app.R
 import com.quriva.app.data.AppPreferences
 import com.quriva.app.data.DailyContent
 import com.quriva.app.data.IslamicCalendar
+import com.quriva.app.data.KhatamPlanner
+import com.quriva.app.data.KhatamStats
+import com.quriva.app.data.PrayerCities
+import com.quriva.app.data.PrayerMethod
+import com.quriva.app.data.PrayerTimes
 import com.quriva.app.model.LastRead
 import com.quriva.app.model.SearchResult
 import com.quriva.app.model.SurahMeta
@@ -122,6 +127,8 @@ private class HomeActions(
     val openAudioDownloads: () -> Unit,
     val openCalendar: () -> Unit,
     val openFriday: () -> Unit,
+    val openPrayer: () -> Unit,
+    val openKhatam: () -> Unit,
     val openSettings: () -> Unit
 )
 
@@ -149,6 +156,8 @@ fun HomeScreen(
     onOpenAudioDownloads: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenFriday: () -> Unit,
+    onOpenPrayer: () -> Unit,
+    onOpenKhatam: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -179,6 +188,8 @@ fun HomeScreen(
         openAudioDownloads = onOpenAudioDownloads,
         openCalendar = onOpenCalendar,
         openFriday = onOpenFriday,
+        openPrayer = onOpenPrayer,
+        openKhatam = onOpenKhatam,
         openSettings = onOpenSettings
     )
 
@@ -243,6 +254,10 @@ fun HomeScreen(
                 )
             }
 
+            item(key = "prayer_pill") {
+                NextPrayerCard(prefs = prefs, onOpen = onOpenPrayer)
+            }
+
             when (val uiState = state) {
                 is HomeUiState.Loading -> {
                     item(key = "search_skeleton") { SearchSkeleton() }
@@ -286,6 +301,31 @@ fun HomeScreen(
                     }
                     item(key = "rhythm") {
                         TodayRhythmCard(stats = streak, onOpen = onOpenProgress)
+                    }
+                    item(key = "worship") {
+                        WorshipTrackerCard(
+                            prefs = prefs,
+                            modifier = Modifier
+                                .padding(horizontal = 20.dp)
+                                .padding(top = 14.dp)
+                        )
+                    }
+                    item(key = "khatam") {
+                        val khatamStats = remember(
+                            prefs.lastRead,
+                            prefs.khatamStartDate,
+                            prefs.khatamStartVerse,
+                            prefs.khatamTargetDays
+                        ) {
+                            KhatamPlanner.compute(context, prefs)
+                        }
+                        KhatamHomeCard(
+                            stats = khatamStats,
+                            onOpen = onOpenKhatam,
+                            modifier = Modifier
+                                .padding(horizontal = 20.dp)
+                                .padding(top = 14.dp)
+                        )
                     }
                     item(key = "search_filters") {
                         SearchAndFilters(
@@ -475,6 +515,8 @@ private fun ColumnScope.HomeFeatureMenu(actions: HomeActions, onClose: () -> Uni
             HomeMenuEntry("Navigasi lengkap", "Hizb, rub, manzil, dan sajdah", R.drawable.ic_navigation, actions.openNavigation)
         ),
         "Ibadah" to listOf(
+            HomeMenuEntry("Jadwal salat & kiblat", "Jadwal offline, pengingat, dan arah kiblat", R.drawable.ic_schedule, actions.openPrayer),
+            HomeMenuEntry("Rencana khatam", "Target 30–365 hari dan proyeksi harian", R.drawable.ic_chart, actions.openKhatam),
             HomeMenuEntry("Hafalan & murajaah", "Rentang ayat, audio, dan jadwal", R.drawable.ic_book_open, actions.openMemorization),
             HomeMenuEntry("Koleksi Islami", "Doa, dzikir, asmaul husna, hadis", R.drawable.ic_bookmark, actions.openContent),
             HomeMenuEntry("Kalender Islam", "Peristiwa dan hitung mundur", R.drawable.ic_schedule, actions.openCalendar),
@@ -556,6 +598,182 @@ private fun ColumnScope.HomeFeatureMenu(actions: HomeActions, onClose: () -> Uni
                     )
                 },
                 contentPadding = PaddingValues(start = 16.dp, end = 14.dp, top = 2.dp, bottom = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun NextPrayerCard(prefs: AppPreferences, onOpen: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    var now by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    val city = remember(prefs.prayerCityId) { PrayerCities.byId(prefs.prayerCityId) }
+    val method = remember(prefs.prayerMethod) {
+        runCatching { PrayerMethod.valueOf(prefs.prayerMethod) }.getOrDefault(PrayerMethod.KEMENAG)
+    }
+    val dayKey = remember(now) {
+        SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date(now))
+    }
+    val schedule = remember(city, method, prefs.prayerAsrHanafi, dayKey) {
+        PrayerTimes.schedule(city, method, prefs.prayerAsrHanafi, now)
+    }
+    val next = schedule.next(now)
+    val remaining = next?.millis?.minus(now) ?: 0L
+
+    Surface(
+        onClick = onOpen,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = colors.surfaceVariant,
+        border = BorderStroke(1.dp, colors.outlineVariant)
+    ) {
+        Row(
+            Modifier.padding(start = 14.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .background(colors.background, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_schedule),
+                    contentDescription = null,
+                    tint = colors.onBackground,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "SALAT BERIKUTNYA · ${city.name.uppercase(Locale.forLanguageTag("id-ID"))}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = .7.sp,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(1.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        next?.prayer?.label ?: "Jadwal salat",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (next != null) {
+                        Text(
+                            " · ${PrayerTimes.formatClock(next.millis, city.timeZoneId)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        if (next == null) "Atur kota"
+                        else if (remaining < 60_000L) "sekarang"
+                        else "${PrayerTimes.countdownLabel(remaining)} lagi",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                painterResource(R.drawable.ic_arrow_forward),
+                contentDescription = "Buka jadwal salat",
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun KhatamHomeCard(
+    stats: KhatamStats,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    val percent = (stats.percent * 100).roundToInt()
+    Surface(
+        onClick = onOpen,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outlineVariant)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .background(colors.surfaceVariant, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painterResource(R.drawable.ic_book_open),
+                        contentDescription = null,
+                        tint = colors.onBackground,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "RENCANA KHATAM",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.1.sp,
+                        color = colors.onSurfaceVariant
+                    )
+                    Text(
+                        if (stats.started) "$percent% perjalanan khatam" else "Mulai rencana khatam",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = colors.onBackground,
+                    contentColor = colors.background
+                ) {
+                    Text(
+                        if (stats.started) "$percent%" else "Mulai",
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { stats.percent },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                color = colors.onBackground,
+                trackColor = colors.outlineVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (stats.started) {
+                    "Sisa ${stats.remainingVerses} ayat · target ${KhatamPlanner.todayDailyTarget(stats)} per hari"
+                } else {
+                    "Pilih target 30–365 hari, progres dihitung dari posisi terakhir dibaca."
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant
             )
         }
     }

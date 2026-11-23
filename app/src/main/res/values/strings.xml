@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Quriva</string>
     <string name="playback_channel_name">Pemutaran murottal</string>
+    <string name="quriva_widget_description">Jadwal salat berikutnya, tanggal Hijriah, dan lanjutan tilawah.</string>
 </resources>

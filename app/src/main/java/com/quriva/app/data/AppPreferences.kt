@@ -87,6 +87,30 @@ class AppPreferences(context: Context) {
 
     var khatamTargetDays by mutableIntStateOf(prefs.getInt(KEY_KHATAM_TARGET, 30))
         private set
+    var khatamStartDate by mutableStateOf(prefs.getString(KEY_KHATAM_START_DATE, "") ?: "")
+        private set
+    var khatamStartVerse by mutableIntStateOf(prefs.getInt(KEY_KHATAM_START_VERSE, 0))
+        private set
+
+    var prayerCityId by mutableStateOf(prefs.getString(KEY_PRAYER_CITY, PrayerCities.default.id) ?: PrayerCities.default.id)
+        private set
+    var prayerMethod by mutableStateOf(prefs.getString(KEY_PRAYER_METHOD, PrayerMethod.KEMENAG.name) ?: PrayerMethod.KEMENAG.name)
+        private set
+    var prayerAsrHanafi by mutableStateOf(prefs.getBoolean(KEY_PRAYER_ASR_HANAFI, false))
+        private set
+    var prayerRemindersEnabled by mutableStateOf(prefs.getBoolean(KEY_PRAYER_REMINDERS, false))
+        private set
+    var prayerReminderMinutes by mutableIntStateOf(prefs.getInt(KEY_PRAYER_REMINDER_MINUTES, 0))
+        private set
+    var prayerEnabledIds by mutableStateOf(
+        readStringSet(KEY_PRAYER_ENABLED).ifEmpty {
+            setOf(Prayer.FAJR.id, Prayer.DHUHR.id, Prayer.ASR.id, Prayer.MAGHRIB.id, Prayer.ISHA.id)
+        }
+    )
+        private set
+
+    var worshipLog by mutableStateOf(readWorshipLog())
+        private set
 
     var reminderEnabled by mutableStateOf(prefs.getBoolean(KEY_REMINDER_ENABLED, false))
         private set
@@ -292,6 +316,71 @@ class AppPreferences(context: Context) {
     fun updateKhatamTarget(days: Int) {
         khatamTargetDays = days.coerceIn(1, 365)
         prefs.edit().putInt(KEY_KHATAM_TARGET, khatamTargetDays).apply()
+    }
+
+    fun startKhatamPlan(days: Int, startVerse: Int) {
+        khatamTargetDays = days.coerceIn(1, 365)
+        khatamStartDate = todayKey()
+        khatamStartVerse = startVerse.coerceIn(0, KHATAM_TOTAL_VERSES - 1)
+        prefs.edit()
+            .putInt(KEY_KHATAM_TARGET, khatamTargetDays)
+            .putString(KEY_KHATAM_START_DATE, khatamStartDate)
+            .putInt(KEY_KHATAM_START_VERSE, khatamStartVerse)
+            .apply()
+    }
+
+    fun ensureKhatamPlan(startVerse: Int): Boolean {
+        if (khatamStartDate.isNotBlank()) return false
+        startKhatamPlan(khatamTargetDays, startVerse)
+        return true
+    }
+
+    fun updatePrayerCity(id: String) {
+        prayerCityId = PrayerCities.byId(id).id
+        prefs.edit().putString(KEY_PRAYER_CITY, prayerCityId).apply()
+    }
+
+    fun updatePrayerMethod(method: PrayerMethod) {
+        prayerMethod = method.name
+        prefs.edit().putString(KEY_PRAYER_METHOD, prayerMethod).apply()
+    }
+
+    fun updatePrayerAsrHanafi(enabled: Boolean) {
+        prayerAsrHanafi = enabled
+        prefs.edit().putBoolean(KEY_PRAYER_ASR_HANAFI, enabled).apply()
+    }
+
+    fun updatePrayerReminders(
+        enabled: Boolean,
+        minutesBefore: Int = prayerReminderMinutes,
+        enabledIds: Set<String> = prayerEnabledIds
+    ) {
+        prayerRemindersEnabled = enabled
+        prayerReminderMinutes = minutesBefore.coerceIn(0, 30)
+        prayerEnabledIds = enabledIds.ifEmpty { prayerEnabledIds }
+        prefs.edit()
+            .putBoolean(KEY_PRAYER_REMINDERS, enabled)
+            .putInt(KEY_PRAYER_REMINDER_MINUTES, prayerReminderMinutes)
+            .putString(KEY_PRAYER_ENABLED, JSONArray(prayerEnabledIds.toList()).toString())
+            .apply()
+    }
+
+    fun isWorshipDone(id: String, date: String = todayKey()): Boolean =
+        worshipLog[date]?.contains(id) == true
+
+    fun worshipCount(date: String = todayKey()): Int = worshipLog[date]?.size ?: 0
+
+    fun toggleWorship(id: String) {
+        val date = todayKey()
+        val current = (worshipLog[date] ?: emptySet()).toMutableSet()
+        if (!current.add(id)) current.remove(id)
+        val updated = worshipLog.toMutableMap()
+        if (current.isEmpty()) updated.remove(date) else updated[date] = current
+        worshipLog = updated.entries
+            .sortedByDescending { it.key }
+            .take(120)
+            .associate { it.key to it.value }
+        persistWorship()
     }
 
     fun updateReminder(enabled: Boolean, hour: Int = reminderHour, minute: Int = reminderMinute) {
@@ -586,6 +675,48 @@ class AppPreferences(context: Context) {
         persistBookmarks(); persistNotes(); persistMemorizationEntries(); true
     } catch (_: Throwable) { false }
 
+    private fun persistWorship() {
+        val obj = JSONObject()
+        worshipLog.forEach { (date, ids) -> obj.put(date, JSONArray(ids.toList())) }
+        prefs.edit().putString(KEY_WORSHIP_LOG, obj.toString()).apply()
+    }
+
+    private fun readWorshipLog(): Map<String, Set<String>> {
+        val raw = prefs.getString(KEY_WORSHIP_LOG, null) ?: return emptyMap()
+        return try {
+            val obj = JSONObject(raw)
+            buildMap {
+                obj.keys().forEach { date ->
+                    val arr = obj.optJSONArray(date) ?: return@forEach
+                    val ids = buildSet {
+                        for (i in 0 until arr.length()) {
+                            val id = arr.optString(i)
+                            if (id.isNotBlank()) add(id)
+                        }
+                    }
+                    if (ids.isNotEmpty()) put(date, ids)
+                }
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun readStringSet(key: String): Set<String> {
+        val raw = prefs.getString(key, null) ?: return emptySet()
+        return try {
+            val arr = JSONArray(raw)
+            buildSet {
+                for (i in 0 until arr.length()) {
+                    val value = arr.optString(i)
+                    if (value.isNotBlank()) add(value)
+                }
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
     private fun persistBookmarks() {
         val array = JSONArray()
         bookmarks.forEach { bookmark ->
@@ -811,6 +942,16 @@ class AppPreferences(context: Context) {
         const val KEY_SEARCH_HISTORY = "search_history"
         const val KEY_PROGRESS = "reading_progress"
         const val KEY_KHATAM_TARGET = "khatam_target"
+        const val KEY_KHATAM_START_DATE = "khatam_start_date"
+        const val KEY_KHATAM_START_VERSE = "khatam_start_verse"
+        const val KEY_PRAYER_CITY = "prayer_city"
+        const val KEY_PRAYER_METHOD = "prayer_method"
+        const val KEY_PRAYER_ASR_HANAFI = "prayer_asr_hanafi"
+        const val KEY_PRAYER_REMINDERS = "prayer_reminders_enabled"
+        const val KEY_PRAYER_REMINDER_MINUTES = "prayer_reminder_minutes"
+        const val KEY_PRAYER_ENABLED = "prayer_enabled_ids"
+        const val KEY_WORSHIP_LOG = "worship_log"
+        const val KHATAM_TOTAL_VERSES = 6236
         const val KEY_REMINDER_ENABLED = "reminder_enabled"
         const val KEY_REMINDER_HOUR = "reminder_hour"
         const val KEY_REMINDER_MINUTE = "reminder_minute"
