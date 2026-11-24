@@ -70,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -630,7 +631,6 @@ private fun QiblaCard(city: PrayerCity) {
     var heading by remember { mutableFloatStateOf(0f) }
     var sensorReady by remember { mutableStateOf(rotationSensor != null) }
     val qibla = remember(city) { PrayerTimes.qiblaBearing(city.latitude, city.longitude) }
-    var needleAngle by remember(city) { mutableFloatStateOf(qibla.toFloat()) }
 
     DisposableEffect(sensorManager, rotationSensor, city.id) {
         if (sensorManager == null || rotationSensor == null) {
@@ -646,13 +646,6 @@ private fun QiblaCard(city: PrayerCity) {
                 val raw = ((Math.toDegrees(orientation[0].toDouble()) + 360.0) % 360.0).toFloat()
                 val delta = ((raw - heading + 540f) % 360f) - 180f
                 heading = (heading + delta * 0.18f + 360f) % 360f
-
-                // Keep the needle pinned to the centre. Smooth across the 0/360
-                // boundary so it never spins the long way round when the phone
-                // crosses north.
-                val target = ((qibla - heading + 360.0) % 360.0).toFloat()
-                val needleDelta = ((target - needleAngle + 540f) % 360f) - 180f
-                needleAngle = (needleAngle + needleDelta * 0.24f + 360f) % 360f
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -666,6 +659,8 @@ private fun QiblaCard(city: PrayerCity) {
     }
 
     val rounded = qibla.roundToInt()
+    val angleToQibla = ((qibla - heading + 540.0) % 360.0) - 180.0
+    val aligned = sensorReady && abs(angleToQibla) <= 4.0
 
     Surface(
         shape = RoundedCornerShape(24.dp),
@@ -700,7 +695,11 @@ private fun QiblaCard(city: PrayerCity) {
                     Modifier
                         .size(206.dp)
                         .semantics {
-                            contentDescription = "Kompas kiblat. Arah kiblat $rounded derajat dari utara."
+                            contentDescription = if (aligned) {
+                                "Kompas kiblat. Arah kiblat $rounded derajat dari utara. Ponsel sudah menghadap kiblat."
+                            } else {
+                                "Kompas kiblat. Arah kiblat $rounded derajat dari utara. Putar ponsel hingga penanda kiblat sejajar dengan jarum tetap di atas."
+                            }
                         }
                 ) {
                     val radius = size.minDimension / 2f
@@ -753,32 +752,68 @@ private fun QiblaCard(city: PrayerCity) {
                                 labelPaint
                             )
                         }
+                        val qiblaRad = Math.toRadians(qibla - 90.0)
+                        val markerRadius = radius - 22.dp.toPx()
+                        val markerX = center.x + (markerRadius * Math.cos(qiblaRad)).toFloat()
+                        val markerY = center.y + (markerRadius * Math.sin(qiblaRad)).toFloat()
+                        val markerHalf = if (aligned) 6.dp.toPx() else 4.5.dp.toPx()
+                        val marker = Path().apply {
+                            moveTo(markerX, markerY - markerHalf)
+                            lineTo(markerX + markerHalf, markerY)
+                            lineTo(markerX, markerY + markerHalf)
+                            lineTo(markerX - markerHalf, markerY)
+                            close()
+                        }
+                        drawPath(
+                            marker,
+                            color = colors.onBackground
+                        )
+                        val rimInset = 4.dp.toPx()
+                        drawArc(
+                            color = colors.onBackground,
+                            startAngle = qibla.toFloat() - 95f,
+                            sweepAngle = 10f,
+                            useCenter = false,
+                            topLeft = Offset(
+                                center.x - radius + rimInset,
+                                center.y - radius + rimInset
+                            ),
+                            size = Size((radius - rimInset) * 2f, (radius - rimInset) * 2f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = if (aligned) 3.5.dp.toPx() else 2.5.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        )
                     }
-                    val needleLength = radius * 0.72f
-                    val needleTail = radius * 0.20f
-                    val needleHalfWidth = radius * 0.082f
-                    val needle = Path().apply {
+                    // The needle stays fixed at the top; only the dial and the
+                    // qibla marker rotate with the phone.
+                    val needleLength = radius * 0.56f
+                    val needleTail = radius * 0.14f
+                    val needleHalfWidth = radius * 0.048f
+                    val fixedNeedle = Path().apply {
                         moveTo(center.x, center.y - needleLength)
                         lineTo(center.x - needleHalfWidth, center.y)
                         lineTo(center.x, center.y + needleTail)
                         lineTo(center.x + needleHalfWidth, center.y)
                         close()
                     }
-                    rotate(needleAngle, center) {
-                        drawPath(needle, color = colors.onBackground)
-                    }
+                    drawPath(fixedNeedle, color = colors.onSurfaceVariant)
                     drawCircle(color = colors.onBackground, radius = 5.dp.toPx(), center = center)
                     drawCircle(color = colors.background, radius = 2.5.dp.toPx(), center = center)
                 }
             }
             Text(
-                if (sensorReady) {
-                    "Letakkan ponsel mendatar. Jarum di tengah menunjuk arah kiblat; putar ponsel hingga jarum mengarah ke atas."
-                } else {
-                    "Sensor arah tidak tersedia. Gunakan angka $rounded° dari utara sebagai panduan arah kiblat."
+                when {
+                    !sensorReady ->
+                        "Sensor arah tidak tersedia. Gunakan angka $rounded° dari utara sebagai panduan arah kiblat."
+                    aligned ->
+                        "Tepat menghadap kiblat. Pertahankan posisi ponsel."
+                    else ->
+                        "Letakkan ponsel mendatar. Putar ponsel hingga penanda kiblat di tepi kompas sejajar dengan jarum tetap di atas."
                 },
                 style = MaterialTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant,
+                color = if (aligned) colors.onBackground else colors.onSurfaceVariant,
+                fontWeight = if (aligned) FontWeight.SemiBold else FontWeight.Normal,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
