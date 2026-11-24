@@ -144,7 +144,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 2.2.0
+- **Versi:** 2.2.1
 - **Pembuat:** Bang syaii
 
 ---

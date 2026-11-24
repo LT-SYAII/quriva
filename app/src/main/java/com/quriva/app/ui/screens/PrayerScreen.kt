@@ -72,13 +72,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -628,8 +630,9 @@ private fun QiblaCard(city: PrayerCity) {
     var heading by remember { mutableFloatStateOf(0f) }
     var sensorReady by remember { mutableStateOf(rotationSensor != null) }
     val qibla = remember(city) { PrayerTimes.qiblaBearing(city.latitude, city.longitude) }
+    var needleAngle by remember(city) { mutableFloatStateOf(qibla.toFloat()) }
 
-    DisposableEffect(sensorManager, rotationSensor) {
+    DisposableEffect(sensorManager, rotationSensor, city.id) {
         if (sensorManager == null || rotationSensor == null) {
             sensorReady = false
             return@DisposableEffect onDispose { }
@@ -643,16 +646,25 @@ private fun QiblaCard(city: PrayerCity) {
                 val raw = ((Math.toDegrees(orientation[0].toDouble()) + 360.0) % 360.0).toFloat()
                 val delta = ((raw - heading + 540f) % 360f) - 180f
                 heading = (heading + delta * 0.18f + 360f) % 360f
+
+                // Keep the needle pinned to the centre. Smooth across the 0/360
+                // boundary so it never spins the long way round when the phone
+                // crosses north.
+                val target = ((qibla - heading + 360.0) % 360.0).toFloat()
+                val needleDelta = ((target - needleAngle + 540f) % 360f) - 180f
+                needleAngle = (needleAngle + needleDelta * 0.24f + 360f) % 360f
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
-        sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+        sensorReady = sensorManager.registerListener(
+            listener,
+            rotationSensor,
+            SensorManager.SENSOR_DELAY_UI
+        )
         onDispose { sensorManager.unregisterListener(listener) }
     }
 
-    val relative = ((qibla - heading + 360.0) % 360.0).toFloat()
-    val arrow by animateFloatAsState(relative, tween(180), label = "qiblaArrow")
     val rounded = qibla.roundToInt()
 
     Surface(
@@ -684,7 +696,13 @@ private fun QiblaCard(city: PrayerCity) {
                 modifier = Modifier.fillMaxWidth().height(218.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Canvas(Modifier.size(206.dp)) {
+                Canvas(
+                    Modifier
+                        .size(206.dp)
+                        .semantics {
+                            contentDescription = "Kompas kiblat. Arah kiblat $rounded derajat dari utara."
+                        }
+                ) {
                     val radius = size.minDimension / 2f
                     val center = Offset(size.width / 2f, size.height / 2f)
                     drawCircle(
@@ -736,33 +754,26 @@ private fun QiblaCard(city: PrayerCity) {
                             )
                         }
                     }
-                    drawCircle(color = colors.onBackground, radius = 4.dp.toPx(), center = center)
-                    drawCircle(color = colors.background, radius = 2.dp.toPx(), center = center)
-                }
-                Icon(
-                    painter = painterResource(R.drawable.ic_qibla_arrow),
-                    contentDescription = "Arah kiblat",
-                    tint = colors.onBackground,
-                    modifier = Modifier
-                        .size(112.dp)
-                        .graphicsLayer {
-                            rotationZ = arrow
-                            translationY = -30.dp.toPx()
-                        }
-                )
-                Box(
-                    Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(colors.inverseSurface),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("◈", style = MaterialTheme.typography.titleMedium, color = colors.inverseOnSurface)
+                    val needleLength = radius * 0.72f
+                    val needleTail = radius * 0.20f
+                    val needleHalfWidth = radius * 0.082f
+                    val needle = Path().apply {
+                        moveTo(center.x, center.y - needleLength)
+                        lineTo(center.x - needleHalfWidth, center.y)
+                        lineTo(center.x, center.y + needleTail)
+                        lineTo(center.x + needleHalfWidth, center.y)
+                        close()
+                    }
+                    rotate(needleAngle, center) {
+                        drawPath(needle, color = colors.onBackground)
+                    }
+                    drawCircle(color = colors.onBackground, radius = 5.dp.toPx(), center = center)
+                    drawCircle(color = colors.background, radius = 2.5.dp.toPx(), center = center)
                 }
             }
             Text(
                 if (sensorReady) {
-                    "Letakkan ponsel mendatar, lalu putar hingga panah mengarah ke atas. Angka menunjukkan derajat dari utara."
+                    "Letakkan ponsel mendatar. Jarum di tengah menunjuk arah kiblat; putar ponsel hingga jarum mengarah ke atas."
                 } else {
                     "Sensor arah tidak tersedia. Gunakan angka $rounded° dari utara sebagai panduan arah kiblat."
                 },
