@@ -89,7 +89,7 @@
 - **Arah kiblat** — kompas berbasis sensor dengan sudut dari utara dan fallback angka derajat.
 - **Pelacak ibadah harian** — checklist lima salat, dzikir pagi/petang, tilawah, dan hafalan yang tersimpan otomatis.
 - **Rencana khatam** — target 30–365 hari, proyeksi ayat/halaman per hari, dan status sesuai jalur.
-- **Widget beranda** — jadwal salat berikutnya, tanggal Hijriah, lanjutan tilawah, dan progres ibadah sekilas.
+- **Widget beranda** — jam langsung dengan detik, hitung mundur salat berikutnya secara real-time, tanggal Hijriah, lanjutan tilawah, dan progres ibadah sekilas.
 
 ---
 
@@ -144,7 +144,7 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 2.2.1
+- **Versi:** 2.3.0
 - **Pembuat:** Bang syaii
 
 ---

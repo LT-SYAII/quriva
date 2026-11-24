@@ -1,5 +1,23 @@
 <resources>
     <string name="app_name">Quriva</string>
     <string name="playback_channel_name">Pemutaran murottal</string>
-    <string name="quriva_widget_description">Jadwal salat berikutnya, tanggal Hijriah, dan lanjutan tilawah.</string>
+    <string name="quriva_widget_description">Jam langsung, salat berikutnya dengan hitung mundur, tanggal Hijriah, lanjutan tilawah, dan progres ibadah.</string>
+
+    <string name="widget_local_time">WAKTU LOKAL</string>
+    <string name="widget_next_prayer">SALAT BERIKUTNYA</string>
+    <string name="widget_menuju">Menuju %1$s ·</string>
+    <string name="widget_again">lagi</string>
+    <string name="widget_worship">IBADAH %1$d/%2$d</string>
+    <string name="widget_worship_description">Ibadah hari ini %1$d dari %2$d</string>
+    <string name="widget_continue_hint">Lanjutkan tilawah</string>
+    <string name="widget_start_reading">Mulai membaca Al-Qur\'an</string>
+    <string name="widget_start_reading_sub">Al-Fatihah menanti</string>
+    <string name="widget_arrived">Waktu salat telah masuk</string>
+    <string name="widget_unavailable">Jadwal tidak tersedia</string>
+
+    <string name="widget_preview_date">24 Nov · 24 Jumadil Awal 1447</string>
+    <string name="widget_preview_prayer">Maghrib</string>
+    <string name="widget_preview_time">17:58</string>
+    <string name="widget_preview_continue">Al-Fatihah · 1/7</string>
+    <string name="widget_preview_worship">IBADAH 3/9</string>
 </resources>
