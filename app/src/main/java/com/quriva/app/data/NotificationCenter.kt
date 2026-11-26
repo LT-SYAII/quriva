@@ -7,8 +7,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.os.Build
 import android.provider.Settings
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -30,7 +32,8 @@ object NotificationCenter {
     const val FRIDAY_CHANNEL_ID = "quriva_friday"
     const val EVENT_CHANNEL_ID = "quriva_islamic_events"
     const val DOWNLOAD_CHANNEL_ID = "quriva_audio_downloads"
-    const val PRAYER_CHANNEL_ID = "quriva_prayer_times"
+    const val PRAYER_CHANNEL_ID = "quriva_prayer_adhan_v1"
+    const val PRAYER_REMINDER_CHANNEL_ID = "quriva_prayer_reminders_v1"
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -53,8 +56,16 @@ object NotificationCenter {
                     .apply { description = "Countdown dan pengingat peristiwa Islam" },
                 NotificationChannel(DOWNLOAD_CHANNEL_ID, "Unduhan Audio", NotificationManager.IMPORTANCE_LOW)
                     .apply { description = "Progres unduhan audio offline" },
-                NotificationChannel(PRAYER_CHANNEL_ID, "Jadwal Salat", NotificationManager.IMPORTANCE_HIGH)
-                    .apply { description = "Pengingat waktu salat sesuai jadwal offline" }
+                NotificationChannel(PRAYER_CHANNEL_ID, "Adzan Salat", NotificationManager.IMPORTANCE_HIGH)
+                    .apply {
+                        description = "Suara adzan saat waktu salat masuk"
+                        setSound(adhanSound(context), adhanAudioAttributes())
+                    },
+                NotificationChannel(
+                    PRAYER_REMINDER_CHANNEL_ID,
+                    "Pengingat Salat",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = "Pengingat sebelum waktu salat masuk" }
             )
         )
     }
@@ -181,7 +192,8 @@ object NotificationCenter {
         minutesBefore: Int
     ): Boolean {
         createChannels(context)
-        if (access(context, PRAYER_CHANNEL_ID) != NotificationAccess.GRANTED) return false
+        val channelId = if (minutesBefore > 0) PRAYER_REMINDER_CHANNEL_ID else PRAYER_CHANNEL_ID
+        if (access(context, channelId) != NotificationAccess.GRANTED) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return false
@@ -204,7 +216,7 @@ object NotificationCenter {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(context, PRAYER_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_quriva)
             .setContentTitle(title)
             .setContentText(text)
@@ -213,12 +225,26 @@ object NotificationCenter {
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .apply {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && minutesBefore == 0) {
+                    setSound(adhanSound(context))
+                }
+            }
             .build()
         return runCatching {
             NotificationManagerCompat.from(context).notify(44_000 + prayer.ordinal, notification)
             true
         }.getOrDefault(false)
     }
+
+    private fun adhanSound(context: Context): Uri =
+        Uri.parse("android.resource://${context.packageName}/${R.raw.adhan}")
+
+    private fun adhanAudioAttributes(): AudioAttributes =
+        AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
 
     fun notifyDownload(context: Context, title: String, progress: Int, done: Boolean = false): Boolean {
         createChannels(context)

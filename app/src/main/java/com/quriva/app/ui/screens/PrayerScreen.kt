@@ -895,7 +895,7 @@ private fun PrayerReminderCard(
                                         when (notificationAccess) {
                                             NotificationAccess.PERMISSION_MISSING -> "Izinkan Quriva mengirim pengingat salat."
                                             NotificationAccess.APP_BLOCKED -> "Notifikasi aplikasi sedang diblokir."
-                                            NotificationAccess.CHANNEL_BLOCKED -> "Kanal Jadwal Salat sedang dimatikan."
+                                            NotificationAccess.CHANNEL_BLOCKED -> "Kanal adzan salat sedang dimatikan."
                                             NotificationAccess.GRANTED -> ""
                                         },
                                         style = MaterialTheme.typography.labelSmall,

@@ -53,7 +53,8 @@ object PrayerReminderScheduler {
                                 minutesBefore = preMinutes
                             )
                         }
-                    } else if (time.millis > now + 5_000L) {
+                    }
+                    if (time.millis > now + 5_000L) {
                         candidates += Candidate(
                             prayer = time.prayer,
                             triggerAt = time.millis,

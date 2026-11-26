@@ -144,8 +144,10 @@ Sesuaikan Quriva dengan kenyamananmu: tema tampilan, ukuran huruf, pilihan tampi
 
 **Tentang Aplikasi**
 - **Nama:** Quriva
-- **Versi:** 2.3.1
+- **Versi:** 2.4.0
 - **Pembuat:** Bang syaii
+
+Suara adzan: Andrewler, [Azan.ogg](https://commons.wikimedia.org/wiki/File:Azan.ogg), lisensi [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 ---
 
