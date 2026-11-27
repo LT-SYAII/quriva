@@ -881,6 +881,37 @@ private fun PrayerReminderCard(
                             )
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.background,
+                        border = BorderStroke(1.dp, colors.outlineVariant)
+                    ) {
+                        Column(Modifier.padding(horizontal = 13.dp, vertical = 4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Suara adzan", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Berkumandang tepat saat waktu salat masuk", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = prefs.adhanEnabled,
+                                    onCheckedChange = { prefs.updateAdhanSettings(it, prefs.fajrAdhanEnabled) }
+                                )
+                            }
+                            if (prefs.adhanEnabled) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Adzan Subuh", style = MaterialTheme.typography.labelMedium)
+                                        Text("Gunakan suara adzan untuk Subuh", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                                    }
+                                    Switch(
+                                        checked = prefs.fajrAdhanEnabled,
+                                        onCheckedChange = { prefs.updateAdhanSettings(prefs.adhanEnabled, it) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                     if (notificationAccess != NotificationAccess.GRANTED) {
                         Spacer(Modifier.height(12.dp))
                         Surface(

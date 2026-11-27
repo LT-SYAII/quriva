@@ -1,6 +1,7 @@
 package com.quriva.app.ui
 
 import android.Manifest
+import android.app.Activity
 import android.app.TimePickerDialog
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -110,11 +111,23 @@ fun SettingsSheet(
     val exportJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         backupStatus = if (uri != null && runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportUserData().toByteArray()) } }.isSuccess) "Backup JSON tersimpan." else "Backup gagal disimpan."
     }
+    val exportComplete = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        backupStatus = if (uri != null && runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportCompleteBackup().toByteArray()) }
+        }.isSuccess) "Backup lengkap tersimpan." else "Backup gagal disimpan."
+    }
     val exportPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         backupStatus = if (uri != null && runCatching { context.contentResolver.openOutputStream(uri)?.use { BackupRepository.writePdf(it, prefs) } }.isSuccess) "PDF tersimpan." else "PDF gagal dibuat."
     }
     val importJson = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         backupStatus = if (uri != null && runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { prefs.importUserData(it.readText()) } ?: false }.getOrDefault(false)) "Backup berhasil dipulihkan." else "Berkas backup tidak valid."
+    }
+    val importComplete = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val restored = uri != null && runCatching {
+            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { prefs.importCompleteBackup(it.readText()) } ?: false
+        }.getOrDefault(false)
+        backupStatus = if (restored) "Backup lengkap dipulihkan. Aplikasi dimuat ulang." else "Backup lengkap tidak valid."
+        if (restored) (context as? Activity)?.recreate()
     }
 
     LaunchedEffect(Unit) {
@@ -480,6 +493,11 @@ fun SettingsSheet(
                 OutlinedButton(onClick = { exportPdf.launch("Quriva-catatan.pdf") }, modifier = Modifier.weight(1f), shape = CircleShape) { Text("Ekspor PDF") }
             }
             OutlinedButton(onClick = { importJson.launch(arrayOf("application/json", "text/plain")) }, modifier = Modifier.fillMaxWidth(), shape = CircleShape) { Text("Pulihkan backup") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { exportComplete.launch("Quriva-backup-lengkap.json") }, modifier = Modifier.weight(1f), shape = CircleShape) { Text("Backup lengkap") }
+                OutlinedButton(onClick = { importComplete.launch(arrayOf("application/json", "text/plain")) }, modifier = Modifier.weight(1f), shape = CircleShape) { Text("Pulihkan lengkap") }
+            }
+            Text("Backup lengkap mencakup seluruh pengaturan dan progres. Audio/cache tidak ikut disalin.", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             AnimatedVisibility(!backupStatus.isNullOrBlank()) { Text(backupStatus.orEmpty(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp)) }
 
             Spacer(Modifier.height(22.dp))

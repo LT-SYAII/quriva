@@ -109,6 +109,12 @@ class AppPreferences(context: Context) {
     )
         private set
 
+    var adhanEnabled by mutableStateOf(prefs.getBoolean(KEY_ADHAN_ENABLED, true))
+        private set
+
+    var fajrAdhanEnabled by mutableStateOf(prefs.getBoolean(KEY_FAJR_ADHAN_ENABLED, true))
+        private set
+
     var worshipLog by mutableStateOf(readWorshipLog())
         private set
 
@@ -363,6 +369,13 @@ class AppPreferences(context: Context) {
             .putInt(KEY_PRAYER_REMINDER_MINUTES, prayerReminderMinutes)
             .putString(KEY_PRAYER_ENABLED, JSONArray(prayerEnabledIds.toList()).toString())
             .apply()
+    }
+
+    fun updateAdhanSettings(enabled: Boolean = adhanEnabled, fajrEnabled: Boolean = fajrAdhanEnabled) {
+        adhanEnabled = enabled
+        fajrAdhanEnabled = fajrEnabled
+        prefs.edit().putBoolean(KEY_ADHAN_ENABLED, enabled)
+            .putBoolean(KEY_FAJR_ADHAN_ENABLED, fajrEnabled).apply()
     }
 
     fun isWorshipDone(id: String, date: String = todayKey()): Boolean =
@@ -657,6 +670,54 @@ class AppPreferences(context: Context) {
             .put("notes", noteArray).put("memorization", memArray).toString(2)
     }
 
+    /** Exports every preference; audio and cache files stay excluded. */
+    fun exportCompleteBackup(): String {
+        val values = JSONArray()
+        prefs.all.toSortedMap().forEach { (key, value) ->
+            val item = JSONObject().put("key", key)
+            when (value) {
+                is Boolean -> item.put("type", "boolean").put("value", value)
+                is Int -> item.put("type", "int").put("value", value)
+                is Long -> item.put("type", "long").put("value", value)
+                is Float -> item.put("type", "float").put("value", value.toDouble())
+                is String -> item.put("type", "string").put("value", value)
+                is Set<*> -> item.put("type", "string_set").put("value", JSONArray(value.filterIsInstance<String>()))
+                else -> return@forEach
+            }
+            values.put(item)
+        }
+        return JSONObject().put("app", "Quriva").put("format", 2)
+            .put("createdAt", System.currentTimeMillis()).put("preferences", values).toString(2)
+    }
+
+    fun importCompleteBackup(raw: String): Boolean = try {
+        val root = JSONObject(raw)
+        require(root.optString("app") == "Quriva" && root.optInt("format") == 2)
+        val values = root.getJSONArray("preferences")
+        require(values.length() <= 500)
+        val editor = prefs.edit().clear()
+        for (i in 0 until values.length()) {
+            val item = values.getJSONObject(i)
+            val key = item.getString("key")
+            require(key.length in 1..100 && key.all { it.isLetterOrDigit() || it == '_' })
+            when (item.getString("type")) {
+                "boolean" -> editor.putBoolean(key, item.getBoolean("value"))
+                "int" -> editor.putInt(key, item.getInt("value"))
+                "long" -> editor.putLong(key, item.getLong("value"))
+                "float" -> editor.putFloat(key, item.getDouble("value").toFloat())
+                "string" -> editor.putString(key, item.getString("value").takeIf { it.length <= 200_000 })
+                "string_set" -> editor.putStringSet(key, buildSet {
+                    val array = item.getJSONArray("value")
+                    require(array.length() <= 2_000)
+                    for (j in 0 until array.length()) add(array.getString(j).take(500))
+                })
+                else -> error("unsupported backup value")
+            }
+        }
+        require(editor.commit())
+        true
+    } catch (_: Throwable) { false }
+
     fun importUserData(raw: String): Boolean = try {
         val root = JSONObject(raw)
         val bs = root.optJSONArray("bookmarks") ?: JSONArray()
@@ -950,6 +1011,8 @@ class AppPreferences(context: Context) {
         const val KEY_PRAYER_REMINDERS = "prayer_reminders_enabled"
         const val KEY_PRAYER_REMINDER_MINUTES = "prayer_reminder_minutes"
         const val KEY_PRAYER_ENABLED = "prayer_enabled_ids"
+        const val KEY_ADHAN_ENABLED = "adhan_enabled"
+        const val KEY_FAJR_ADHAN_ENABLED = "fajr_adhan_enabled"
         const val KEY_WORSHIP_LOG = "worship_log"
         const val KHATAM_TOTAL_VERSES = 6236
         const val KEY_REMINDER_ENABLED = "reminder_enabled"

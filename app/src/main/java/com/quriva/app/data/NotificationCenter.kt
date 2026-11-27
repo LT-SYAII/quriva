@@ -192,6 +192,9 @@ object NotificationCenter {
         minutesBefore: Int
     ): Boolean {
         createChannels(context)
+        val prefs = AppPreferences(context.applicationContext)
+        if (minutesBefore == 0 && (!prefs.adhanEnabled ||
+            (prayer == Prayer.FAJR && !prefs.fajrAdhanEnabled))) return false
         val channelId = if (minutesBefore > 0) PRAYER_REMINDER_CHANNEL_ID else PRAYER_CHANNEL_ID
         if (access(context, channelId) != NotificationAccess.GRANTED) return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
